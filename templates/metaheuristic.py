@@ -35,8 +35,9 @@ class Metaheuristic:
         If you follow this template, self.best_solution should contain the best solution found so far and you should return that solution encoded in the specified format.
         If the returned solution does not follow the format specified in the project specification, you will be disqualified from the tournament.
         """
-        #TODO
-        pass
+        if self.best_solution is None:
+            raise Exception("No solution has been found yet.")
+        return self.best_solution
 
 
     def run(self):
