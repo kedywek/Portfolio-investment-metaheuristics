@@ -1,3 +1,5 @@
+import json
+import numpy as np
 
 class Metaheuristic:
     """
@@ -18,7 +20,12 @@ class Metaheuristic:
         Args:
             problem_path: Text file that contains information about a problem instance
         """
-        pass
+        instance_data = json.load(open(problem_path,'r'))
+        self.n = instance_data['n']
+        self.k = instance_data['k']
+        self.R = instance_data['R']
+        self.r = np.array(instance_data['r'])
+        self.d = np.array(instance_data['dij'])
 
     def get_best_solution(self):
         """
