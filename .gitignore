@@ -1,2 +1,2 @@
-instances/*.json
 .venv/
+__pycache__
