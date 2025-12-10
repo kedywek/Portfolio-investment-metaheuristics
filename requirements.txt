@@ -1,3 +1,6 @@
 numpy
 click
 func_timeout
+coclust
+tqdm
+matplotlib
