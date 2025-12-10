@@ -21,4 +21,6 @@ Used components:
 - find optimal parameters
 - different behaviour in hard tasks (for example if n=1000 then focus more on exploration)
 - try to preprocess sth and use that information
+- different population initialization (maybe some greedy heuristics)
+- round solutions close to best to achive best possible globally
 - ...
