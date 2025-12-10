@@ -45,7 +45,11 @@ class Metaheuristic:
         picks = np.argsort(x)[-self.k :]
         mask = np.isin(np.arange(self.n), picks)
         x *= mask
-        return x / x.sum()
+        normalized = x / x.sum()  # potential division by zero
+        normalized = np.nan_to_num(
+            normalized, posinf=0.0, neginf=0.0
+        )  # handle division by zero
+        return normalized.tolist()
 
     def run(self):
         """
@@ -76,12 +80,12 @@ class Metaheuristic:
             if q_t > self.q_best:
                 self.x_best = x_t
                 self.q_best = q_t
-            self.avg_rate_epochs.append(children_rate.mean())
-            self.best_rate_epochs.append(q_t)
             # succession
             curr_popoulation, curr_rate = self.elite_succession(
                 curr_popoulation, curr_rate, children_popoulation, children_rate
             )
+            self.avg_rate_epochs.append(curr_rate.mean())
+            self.best_rate_epochs.append(curr_rate.max())
 
     def __init__(self, time_deadline, problem_path, pop_size=20, sigma=0.5, **kwargs):
         """
@@ -111,7 +115,10 @@ class Metaheuristic:
         # changing not chosen elements to zero and normalizing chosen ones
         mask = np.isin(np.arange(self.n), picks)
         x *= mask
-        normalized = x / x.sum()
+        normalized = x / x.sum()  # potential division by zero
+        normalized = np.nan_to_num(
+            normalized, posinf=0.0, neginf=0.0
+        )  # handle division by zero
 
         # iterate through all pairs and calculate the objective value
         i, j = np.triu_indices(self.k, k=1)
@@ -202,7 +209,7 @@ def draw_graph(v1, v2):
 
 if __name__ == "__main__":
     met = Metaheuristic(
-        time_deadline=60, problem_path="instances/instance_n100_k10_7.json"
+        time_deadline=15, problem_path="instances/instance_n100_k10_7.json"
     )
     met.run()
     print("Best solution found:\n", met.get_best_solution())
