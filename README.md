@@ -1,3 +1,8 @@
+## Pre-Assignment
+Current pre-assignment implementation clusters the assets based on cosine distance of the distance matrix columns. After clustering the asset with highest return within a cluster is chosen and the assets within a distance threshold are excluded from the rest of the search.
+
+Reduces the dimensionality of the search by mutually excluding entries that are similar to each other. Assets that have low cosine distance will contribute very similarly to the objective function.
+
 ## About this implementation
 Genotype consists of n real numbers. In order to extract fenotype (where and how much to invest) conversion is needed: extract k highest numbers from genotype and normalize them (sum = 1), while change other numbers to 0.
 This allows for freedom in crossover and mutation operators.
