@@ -38,8 +38,15 @@ def run_metaheuristic(deadline, instance):
     except FunctionTimedOut:
         total_time = deadline
     # TODO: Whatever you want to do after executing your metaheuristic
-    print("Best solution found:\n", met.get_best_solution())
+    best_solution = met.get_best_solution()
+    print("Best solution found:\n", best_solution)
+    print(f"Solution sum: {sum(best_solution)}")
+    print(f"Return of best solution: {met.r_best} >= {met.R}")
+    print(f"Portfolio size of best solution: {met.k_best} = {met.k}")
+    print(f"Total time taken: {total_time}/{deadline} seconds")
+    met.draw_graph()
     print("\nBest rate found:", met.q_best)
+
 
 
 if __name__ == "__main__":

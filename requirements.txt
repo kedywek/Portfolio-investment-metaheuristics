@@ -4,3 +4,5 @@ func_timeout
 coclust
 tqdm
 matplotlib
+pytest
+scipy
