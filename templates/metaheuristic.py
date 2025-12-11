@@ -24,10 +24,18 @@ class Metaheuristic:
         """
         instance_data = json.load(open(problem_path, "r"))
         self.n = instance_data["n"]
+        self.full_n = self.n
         self.k = instance_data["k"]
         self.R = instance_data["R"]
         self.r = np.array(instance_data["r"])
         self.d = np.array(instance_data["dij"])
+    
+    def set_x_best(self, x_best):
+        if self.pre_ass:
+            temp_best = np.zeros(self.full_n)
+            temp_best[self.used_assets] = x_best
+            self.x_best = temp_best
+        else: self.x_best = x_best
 
     def get_best_solution(self):
         """
@@ -43,7 +51,7 @@ class Metaheuristic:
         # extracting picks and normalizing
         x = self.x_best.copy()
         picks = np.argsort(x)[-self.k :]
-        mask = np.isin(np.arange(self.n), picks)
+        mask = np.isin(np.arange(self.full_n), picks)
         x *= mask
         normalized = x / x.sum()  # potential division by zero
         normalized = np.nan_to_num(
@@ -101,6 +109,7 @@ class Metaheuristic:
                     excluded.add(idx)
 
         self.excluded_assets = sorted(excluded)
+        self.used_assets = [i for i in range(n) if i not in excluded]
 
     def run(self):
         """
@@ -121,7 +130,8 @@ class Metaheuristic:
         curr_popoulation = self.initialize_population(self.pop_size)
         curr_rate = self.rate(curr_popoulation)
         self.avg_rate_epochs = [curr_rate.mean()]
-        self.x_best, self.q_best = self.find_best(curr_popoulation, curr_rate)
+        temp_best, self.q_best = self.find_best(curr_popoulation, curr_rate)
+        self.set_x_best(temp_best)
         self.best_rate_epochs = [self.q_best]
         start_time = time.time()
         while time.time() - start_time <= self.time_deadline:
@@ -135,7 +145,7 @@ class Metaheuristic:
             children_rate = self.rate(children_popoulation)
             x_t, q_t = self.find_best(children_popoulation, children_rate)
             if q_t > self.q_best:
-                self.x_best = x_t
+                self.set_x_best(x_t)
                 self.q_best = q_t
             # succession
             curr_popoulation, curr_rate = self.elite_succession(
