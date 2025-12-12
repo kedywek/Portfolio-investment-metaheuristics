@@ -1,1 +1,4 @@
 https://www.sciencedirect.com/science/article/pii/S2210650218309702
+base pso: https://www.sciencedirect.com/science/article/pii/S0957417411000406
+rl pso: https://www.sciencedirect.com/science/article/pii/S0957417419302441
+pre-assignment: https://arxiv.org/abs/2503.15965
