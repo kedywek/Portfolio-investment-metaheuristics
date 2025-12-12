@@ -100,11 +100,56 @@ class Metaheuristic:
             keep = comp[keep_local]
             # Exclude assets in the cluster that are below the similarity threshold with the kept asset
             for idx in comp:
-                if idx != keep and S[idx, keep] < thr:
+                if idx != keep and S[idx, keep] > thr:
                     excluded.add(idx)
 
         self.excluded_assets = sorted(excluded)
         self.used_assets = [i for i in range(n) if i not in excluded]
+
+    def quick_pre_assignment(self):
+        D = self.d
+        max_exclusions = self.n-(self.k*2)  # heuristic limit to avoid over-exclusion
+        if max_exclusions <= 0:
+            self.pre_ass = False
+            self.excluded_assets = []
+            self.used_assets = list(range(self.n))
+            return
+
+        # Feature vectors: columns of D (distance profiles), normalized to unit norm
+        col_norms = np.linalg.norm(D, axis=0)
+        safe_norms = np.where(col_norms == 0.0, 1.0, col_norms)
+        X = (D / safe_norms).T  # shape: (n_assets, feature_dim)
+
+        # Precompute cosine similarity matrix between assets using normalized features
+        S = np.clip((X @ X.T), -1.0, 1.0)
+
+        sorted_indices = sorted(range(self.n), key=lambda x: -self.r[x])
+        while not self.run_quick_pa(S, max_exclusions, sorted_indices, self.similarity_threshold):
+            self.similarity_threshold += 0.01
+            if self.similarity_threshold > 1.0:
+                self.pre_ass = False
+                self.excluded_assets = []
+                self.used_assets = list(range(self.n))
+                break
+        
+        
+    def run_quick_pa(self, S, max_exclusions, sorted_indices, threshold):
+        excluded = set()
+        for idx, i in enumerate(sorted_indices):
+            if i in excluded:
+                continue
+            for j in sorted_indices[idx:]:
+                if j in excluded:
+                    continue
+                if j != i and S[i, j] > threshold:
+                    excluded.add(j)
+                    if len(excluded) >= max_exclusions:
+                        return False
+
+        self.excluded_assets = sorted(excluded)
+        self.used_assets = [i for i in range(self.n) if i not in excluded]
+
+        return True
 
     def run(self):
         """
@@ -116,7 +161,7 @@ class Metaheuristic:
             self.problem_path
         )  # You should keep this line. Otherwise, disqualified from the tournament
         if self.pre_ass:
-            self.pre_assignment()
+            self.quick_pre_assignment()
             self.n -= len(self.excluded_assets)
             self.r = np.delete(self.r, self.excluded_assets, axis=0)
             self.d = np.delete(self.d, self.excluded_assets, axis=0)
