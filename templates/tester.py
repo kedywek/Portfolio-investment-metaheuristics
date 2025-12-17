@@ -44,6 +44,7 @@ def run_metaheuristic(deadline, instance):
     print(f"Return of best solution: {met.r_best} >= {met.R}")
     print(f"Portfolio size of best solution: {met.k_best} = {met.k}")
     print(f"Total time taken: {total_time}/{deadline} seconds")
+    print(f"Excluded {len(met.excluded_assets)}/{met.full_n} assets")
     met.draw_graph()
     print("\nBest rate found:", met.q_best)
 

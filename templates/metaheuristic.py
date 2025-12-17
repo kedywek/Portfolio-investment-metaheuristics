@@ -125,7 +125,7 @@ class Metaheuristic:
 
         sorted_indices = sorted(range(self.n), key=lambda x: -self.r[x])
         while not self.run_quick_pa(S, max_exclusions, sorted_indices, self.similarity_threshold):
-            self.similarity_threshold += 0.01
+            self.similarity_threshold += 0.005
             if self.similarity_threshold > 1.0:
                 self.pre_ass = False
                 self.excluded_assets = []
@@ -186,8 +186,9 @@ class Metaheuristic:
             curr_returns = self.get_returns(solutions=curr_solutions)
             curr_size = self.get_sizes(curr_popoulation)
             ret_cond = self.R-curr_returns
-            feasible = ret_cond <= 0
-            curr_fitness = np.where(feasible, curr_rates, ret_cond+1)
+            size_cond = np.abs(curr_size - self.k)
+            feasible = (ret_cond <= 0) & (size_cond <= 0)
+            curr_fitness = np.where(feasible, curr_rates, np.maximum(ret_cond, size_cond) + 1)
 
             # Update particle best
             pbest_update = curr_fitness < pbest
@@ -314,8 +315,8 @@ class Metaheuristic:
         self.pop_size = pop_size
         self.B = kwargs.get('B', 1000)  # upper bound for position values
         self.sigma = sigma  # standard deviation for gaussian mutation 
-        self.pre_ass = kwargs.get('pre_assignment', False)
-        self.similarity_threshold = kwargs.get('similarity_threshold', 0.75)
+        self.pre_ass = kwargs.get('pre_assignment', True)
+        self.similarity_threshold = kwargs.get('similarity_threshold', 0.7)
         self.n_km_init = kwargs.get('n_km_init', 1)
         self.max_leaders = kwargs.get('max_leaders', 10)
         self.max_feasible = kwargs.get('max_feasible', 50000)
