@@ -66,3 +66,12 @@ class PreAssignmentMixin:
         for local_idx, global_idx in enumerate(self.used_assets):
             full[global_idx] = weights[local_idx]
         return full
+    
+    def expand_distances(self, distances):
+        if self.full_n is None or not self.pre_ass:
+            return distances
+        full = np.zeros((self.full_n, self.full_n), dtype=float)
+        for local_i, global_i in enumerate(self.used_assets):
+            for local_j, global_j in enumerate(self.used_assets):
+                full[global_i, global_j] = distances[local_i, local_j]
+        return full
