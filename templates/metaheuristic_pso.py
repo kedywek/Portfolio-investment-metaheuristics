@@ -2,6 +2,13 @@ import json
 import numpy as np
 import time
 from scipy.spatial.distance import cdist
+
+from pathlib import Path
+import sys
+# Ensure we can import from templates/
+this_dir = Path(__file__).resolve().parent.parent
+if str(this_dir) not in sys.path:
+    sys.path.insert(0, str(this_dir))
 from templates.pre_assignment_mixin import PreAssignmentMixin
 
 
