@@ -66,7 +66,7 @@ class Metaheuristic(PreAssignmentMixin):
         """
         self.read_problem_instance(self.problem_path)
         if self.pre_ass:
-            self.apply_pre_assignment(method='quick')
+            self.apply_pre_assignment()
         curr_popoulation, curr_velocity = self.initialize_population(self.pop_size)
         curr_rates = -self.get_rates(curr_popoulation)
         max_val = curr_rates.max()

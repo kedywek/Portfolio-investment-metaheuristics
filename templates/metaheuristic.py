@@ -78,7 +78,7 @@ class Metaheuristic(PreAssignmentMixin):
 
         # Apply quick pre-assignment (same as PSO) if enabled
         if self.pre_ass:
-            self.apply_pre_assignment(method='quick')
+            self.apply_pre_assignment()
 
         curr_popoulation = self.initialize_population(self.pop_size)
         curr_rate = self.rate(curr_popoulation)
