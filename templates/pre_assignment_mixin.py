@@ -9,48 +9,6 @@ class PreAssignmentMixin:
         self.used_assets = []
         self.full_n = None
 
-    def pre_assignment(self):
-        from coclust.clustering import SphericalKmeans
-        import io
-        from contextlib import redirect_stdout, redirect_stderr
-
-        n = self.n
-        D = self.d
-        r = self.r
-        thr = self.similarity_threshold
-
-        col_norms = np.linalg.norm(D, axis=0)
-        safe_norms = np.where(col_norms == 0.0, 1.0, col_norms)
-        X = (D / safe_norms).T
-
-        k_clusters = max(1, int(n / 2))
-        km = SphericalKmeans(n_clusters=k_clusters, n_init=self.n_km_init)
-
-        fnull = io.StringIO()
-        with redirect_stdout(fnull), redirect_stderr(fnull):
-            km.fit(X)
-        labels = km.labels_
-
-        clusters = {}
-        for idx, lab in enumerate(labels):
-            clusters.setdefault(lab, []).append(idx)
-
-        S = np.clip((X @ X.T), -1.0, 1.0)
-
-        excluded = set()
-        for comp in clusters.values():
-            if len(comp) <= 1:
-                continue
-            comp_rs = r[comp]
-            keep_local = int(np.argmax(comp_rs))
-            keep = comp[keep_local]
-            for idx in comp:
-                if idx != keep and S[idx, keep] > thr:
-                    excluded.add(idx)
-
-        self.excluded_assets = sorted(excluded)
-        self.used_assets = [i for i in range(n) if i not in excluded]
-
     def quick_pre_assignment(self):
         D = self.d
         max_exclusions = self.n - (self.k * 2)
@@ -91,12 +49,9 @@ class PreAssignmentMixin:
         self.used_assets = [i for i in range(self.n) if i not in excluded]
         return True
 
-    def apply_pre_assignment(self, method='quick'):
+    def apply_pre_assignment(self):
         self.full_n = self.n
-        if method == 'quick':
-            self.quick_pre_assignment()
-        else:
-            self.pre_assignment()
+        self.quick_pre_assignment()
 
         if self.pre_ass and len(self.excluded_assets) > 0:
             self.n -= len(self.excluded_assets)
