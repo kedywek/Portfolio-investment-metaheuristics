@@ -1,9 +1,10 @@
 import json
 import numpy as np
 import time
+from templates.pre_assignment_mixin import PreAssignmentMixin
 
 
-class Metaheuristic:
+class Metaheuristic(PreAssignmentMixin):
     """
     In this class you should implement your metaheuristic proposal. The code that you submit for the tournament should be
     included in this class. Please, bear in mind that the current template includes all the mandatory methods, but you can implement any
@@ -29,44 +30,55 @@ class Metaheuristic:
         self.r = np.array(instance_data["r"])
         self.d = np.array(instance_data["dij"])
 
+    def __init__(
+        self,
+        time_deadline,
+        problem_path,
+        pop_size=20,
+        children_size=140,
+        preserve_parents=True,
+        **kwargs,
+    ):
+        self.problem_path = problem_path
+        self.best_solution = None
+        self.time_deadline = time_deadline
+
+        self.pop_size = pop_size
+        self.children_size = children_size
+        self.preserve_parents = preserve_parents
+
+        # init mixin-configurable pre-assignment knobs
+        PreAssignmentMixin.__init__(self, **kwargs)
+
     def get_best_solution(self):
-        """
-        This method is used to return EXTERNALLY the best solution found so far in the metaheuristic. The solution should be returned in a very
-        specific format. For that, you are addressed to the project specification. Please, bear in mind that, INTERNALLY, you can represent
-        solutions in any format that you see fit. However, externally, solutions should always be returned in the same way in order to participate in the tournament.
-        If you follow this template, self.best_solution should contain the best solution found so far and you should return that solution encoded in the specified format.
-        If the returned solution does not follow the format specified in the project specification, you will be disqualified from the tournament.
-        """
         if self.x_best is None:
             raise Exception("No solution has been found yet.")
 
-        # extracting picks and normalizing
         x = self.x_best["decision"].copy()
-        picks = np.argsort(x)[-self.k :]
+        picks = np.argsort(x)[-self.k:]
         mask = np.isin(np.arange(self.n), picks)
         x *= mask
-        x[x < 0] = 1e-6  # avoid negative values but have to keep them positive
-        normalized = x / x.sum()  # potential division by zero
-        normalized = np.nan_to_num(
-            normalized, posinf=0.0, neginf=0.0
-        )  # handle division by zero
-        return normalized.tolist()
+        x[x < 0] = 1e-6
+        normalized = x / x.sum()
+        normalized = np.nan_to_num(normalized, posinf=0.0, neginf=0.0)
+
+        # If pre-assignment reduced the universe, expand back to full_n
+        expanded = self.expand_weights(normalized) if self.pre_ass else normalized
+        return expanded.tolist()
 
     def run(self):
-        """
-        This method is in charge of reading the problem instance from a file and then executing the whole logic of the metaheuristic, including initialization
-        and the main search procedure.
-        TODO: You should implement from the pass statement.
-        """
-        self.read_problem_instance(
-            self.problem_path
-        )  # You should keep this line. Otherwise, disqualified from the tournament
+        self.read_problem_instance(self.problem_path)
+
+        # Apply quick pre-assignment (same as PSO) if enabled
+        if self.pre_ass:
+            self.apply_pre_assignment(method='quick')
 
         curr_popoulation = self.initialize_population(self.pop_size)
         curr_rate = self.rate(curr_popoulation)
         self.avg_rate_epochs = [curr_rate.mean()]
         self.x_best, self.q_best = self.find_best(curr_popoulation, curr_rate)
         self.best_rate_epochs = [self.q_best]
+        self.epochs_times = [0.0]
         start_time = time.time()
         while time.time() - start_time <= self.time_deadline:
             # reproduction
@@ -100,34 +112,7 @@ class Metaheuristic:
                 )
             self.avg_rate_epochs.append(curr_rate.mean())
             self.best_rate_epochs.append(curr_rate.max())
-
-    def __init__(
-        self,
-        time_deadline,
-        problem_path,
-        pop_size=20,
-        children_size=140,
-        preserve_parents=True,
-        **kwargs,
-    ):
-        """
-        Class initializer. It takes as an argument the maximum computation time (in seconds), controlled externally, and the path that contains the problem instance to be solved
-        YOU CAN MODIFY THE HEADER TO INCLUDE OPTIONAL PARAMETERS WITH DEFAULT VALUES ( e.g., __init__(self, time_deadline, problem_path, mut_prob=0.5) )
-        You should configure the algorithm before its execution in this method (i.e., hyperparameter values, data structure initialization, etc.)
-        Args:
-            problem_path: String that contains the path to the file that describes the problem instance
-            time_deadline: Computation time limit for the metaheuristic
-            kwargs: Other arguments can be passed to the algorithm using key-value pairs. For instance, Metaheuristic(20, 'instance1.txt', mut_prob=0.3) would call the initializer with 20 seconds, for reading the instance1.txt file and passing an optional parameter of mut_prob=0.3
-        """
-        self.problem_path = problem_path  # This attribute is meant to contain the path to the problem instance
-        self.best_solution = None  # This attribute is meant to hold, at any time, the best solution found by the algorithm so far. Hence, you should update it accordingly. The solution enconding does not matter.
-        self.time_deadline = (
-            time_deadline  # Computation limit (in seconds) for the metaheuristic
-        )
-        # TODO: Configure the metaheuristic (e.g., selection operator, crossover, mutation, hyperparameter values, etc.)
-        self.pop_size = pop_size
-        self.children_size = children_size
-        self.preserve_parents = preserve_parents
+            self.epochs_times.append(time.time() - start_time)
 
     def evaluate(self, x):
         result = 0

@@ -2,9 +2,10 @@ import json
 import numpy as np
 import time
 from scipy.spatial.distance import cdist
+from templates.pre_assignment_mixin import PreAssignmentMixin
 
 
-class Metaheuristic:
+class Metaheuristic(PreAssignmentMixin):
     """
     In this class you should implement your metaheuristic proposal. The code that you submit for the tournament should be
     included in this class. Please, bear in mind that the current template includes all the mandatory methods, but you can implement any
@@ -32,11 +33,7 @@ class Metaheuristic:
         self.d = np.array(instance_data["dij"])
     
     def set_x_best(self, x_best):
-        if self.pre_ass:
-            temp_best = np.zeros(self.full_n)
-            temp_best[self.used_assets] = x_best
-            self.x_best = temp_best
-        else: self.x_best = x_best
+        self.x_best = self.expand_weights(x_best) if self.pre_ass else x_best
 
     def get_best_solution(self):
         """
@@ -53,103 +50,6 @@ class Metaheuristic:
         x = self.x_best.copy()
         normalized = x / (x.sum() + 1e-10)
         return normalized.tolist()
-    
-    def pre_assignment(self):
-        """
-        This method is in charge of performing pre-assignment to limit the search space of the metaheuristic.
-        """
-        from coclust.clustering import SphericalKmeans
-        import io
-        from contextlib import redirect_stdout, redirect_stderr
-
-        n = self.n
-        D = self.d
-        r = self.r
-        thr = self.similarity_threshold
-
-        # Feature vectors: columns of D (distance profiles), normalized to unit norm
-        col_norms = np.linalg.norm(D, axis=0)
-        safe_norms = np.where(col_norms == 0.0, 1.0, col_norms)
-        X = (D / safe_norms).T  # shape: (n_assets, feature_dim)
-
-        # Determine number of clusters based on n
-        k_clusters = max(1, int(n/2))
-
-        # Run Spherical K-Means (cosine-based)
-        km = SphericalKmeans(n_clusters=k_clusters, n_init=self.n_km_init)
-        fnull = io.StringIO()
-        with redirect_stdout(fnull), redirect_stderr(fnull):
-            km.fit(X)
-        labels = km.labels_
-
-        # Group indices by cluster label
-        clusters = {}
-        for idx, lab in enumerate(labels):
-            clusters.setdefault(lab, []).append(idx)
-
-        # Precompute cosine similarity matrix between assets using normalized features
-        S = np.clip((X @ X.T), -1.0, 1.0)
-
-        excluded = set()
-        for comp in clusters.values():
-            if len(comp) <= 1:
-                continue
-            # Elect the asset with the highest r value to keep
-            comp_rs = r[comp]
-            keep_local = int(np.argmax(comp_rs))
-            keep = comp[keep_local]
-            # Exclude assets in the cluster that are below the similarity threshold with the kept asset
-            for idx in comp:
-                if idx != keep and S[idx, keep] > thr:
-                    excluded.add(idx)
-
-        self.excluded_assets = sorted(excluded)
-        self.used_assets = [i for i in range(n) if i not in excluded]
-
-    def quick_pre_assignment(self):
-        D = self.d
-        max_exclusions = self.n-(self.k*2)  # heuristic limit to avoid over-exclusion
-        if max_exclusions <= 0:
-            self.pre_ass = False
-            self.excluded_assets = []
-            self.used_assets = list(range(self.n))
-            return
-
-        # Feature vectors: columns of D (distance profiles), normalized to unit norm
-        col_norms = np.linalg.norm(D, axis=0)
-        safe_norms = np.where(col_norms == 0.0, 1.0, col_norms)
-        X = (D / safe_norms).T  # shape: (n_assets, feature_dim)
-
-        # Precompute cosine similarity matrix between assets using normalized features
-        S = np.clip((X @ X.T), -1.0, 1.0)
-
-        sorted_indices = sorted(range(self.n), key=lambda x: -self.r[x])
-        while not self.run_quick_pa(S, max_exclusions, sorted_indices, self.similarity_threshold):
-            self.similarity_threshold += 0.005
-            if self.similarity_threshold > 1.0:
-                self.pre_ass = False
-                self.excluded_assets = []
-                self.used_assets = list(range(self.n))
-                break
-        
-        
-    def run_quick_pa(self, S, max_exclusions, sorted_indices, threshold):
-        excluded = set()
-        for idx, i in enumerate(sorted_indices):
-            if i in excluded:
-                continue
-            for j in sorted_indices[idx:]:
-                if j in excluded:
-                    continue
-                if j != i and S[i, j] > threshold:
-                    excluded.add(j)
-                    if len(excluded) >= max_exclusions:
-                        return False
-
-        self.excluded_assets = sorted(excluded)
-        self.used_assets = [i for i in range(self.n) if i not in excluded]
-
-        return True
 
     def run(self):
         """
@@ -157,16 +57,9 @@ class Metaheuristic:
         and the main search procedure.
         TODO: You should implement from the pass statement.
         """
-        self.read_problem_instance(
-            self.problem_path
-        )  # You should keep this line. Otherwise, disqualified from the tournament
+        self.read_problem_instance(self.problem_path)
         if self.pre_ass:
-            self.quick_pre_assignment()
-            self.n -= len(self.excluded_assets)
-            self.r = np.delete(self.r, self.excluded_assets, axis=0)
-            self.d = np.delete(self.d, self.excluded_assets, axis=0)
-            self.d = np.delete(self.d, self.excluded_assets, axis=1)
-
+            self.apply_pre_assignment(method='quick')
         curr_popoulation, curr_velocity = self.initialize_population(self.pop_size)
         curr_rates = -self.get_rates(curr_popoulation)
         max_val = curr_rates.max()
@@ -174,11 +67,16 @@ class Metaheuristic:
         pbest_pos = curr_popoulation.copy()
         gbest = max_val + 1
         gbest_pos = None
+        # Exploration/state trackers
+        no_improve = np.zeros(self.pop_size, dtype=int)
+        gbest_no_improve = 0
 
         total_feasible = 0
         self.best_rate_epochs = []
+        self.epochs_times = []
         self.avg_rate_epochs = []
         self.feasible_epochs = []
+        start_time = time.time()
         while total_feasible < self.max_feasible:
             # Calculate fitness
             curr_solutions = self.get_solutions(curr_popoulation)
@@ -194,6 +92,9 @@ class Metaheuristic:
             pbest_update = curr_fitness < pbest
             pbest[pbest_update] = curr_fitness[pbest_update]
             pbest_pos[pbest_update] = curr_popoulation[pbest_update]
+            # Track particle-level stagnation
+            no_improve[~pbest_update] += 1
+            no_improve[pbest_update] = 0
 
             # Update global best
             min_idx = np.argmin(pbest)
@@ -204,9 +105,13 @@ class Metaheuristic:
                 self.q_best = -gbest
                 self.r_best = curr_returns[min_idx]
                 self.k_best = curr_size[min_idx]
+                gbest_no_improve = 0
+            else:
+                gbest_no_improve += 1
             
             # Record stats
             self.best_rate_epochs.append(gbest)
+            self.epochs_times.append(time.time() - start_time)
             self.avg_rate_epochs.append(curr_rates.mean())
             num_feasible = feasible.sum()
             self.feasible_epochs.append(num_feasible)
@@ -228,6 +133,7 @@ class Metaheuristic:
             non_leaders_vel = curr_velocity[non_leader_mask]
             non_leaders_pbest = pbest[non_leader_mask]
             non_leaders_pbest_pos = pbest_pos[non_leader_mask]
+            non_leader_indices = np.where(non_leader_mask)[0]
 
             # Construct subpopulations around leaders (with thresholding)
             distances = cdist(non_leaders[:, :self.n], leaders[:, :self.n], metric='euclidean')
@@ -254,6 +160,31 @@ class Metaheuristic:
 
             # Calcuate mutation probablility
             pm = 0.5 * (1 - total_feasible / self.max_feasible)**2
+            # Diversity-aware boost (normalized in [0,1])
+            div = self._picks_diversity(curr_popoulation)
+            if div < self.diversity_floor:
+                pm = min(1.0, pm * self.mutation_boost)
+
+            # Reinitialize stagnant non-leaders to escape local traps
+            if non_leaders.shape[0] > 0:
+                stagnant_mask_nl = no_improve[non_leader_indices] >= self.stagnation_patience
+                if np.any(stagnant_mask_nl):
+                    self._reinitialize_subset(non_leaders[stagnant_mask_nl], non_leaders_vel[stagnant_mask_nl])
+                    non_leaders_pbest[stagnant_mask_nl] = np.inf
+                    non_leaders_pbest_pos[stagnant_mask_nl] = non_leaders[stagnant_mask_nl]
+                    no_improve[non_leader_indices[stagnant_mask_nl]] = 0
+
+            # Inject random immigrants if gbest stagnates
+            if gbest_no_improve >= self.gbest_patience and non_leaders.shape[0] > 0:
+                num_imm = max(1, int(self.restart_fraction * non_leaders.shape[0]))
+                # choose worst non-leaders by current fitness
+                order_nl = np.argsort(curr_fitness[non_leader_indices])
+                worst_sel = order_nl[-num_imm:]
+                self._reinitialize_subset(non_leaders[worst_sel], non_leaders_vel[worst_sel])
+                non_leaders_pbest[worst_sel] = np.inf
+                non_leaders_pbest_pos[worst_sel] = non_leaders[worst_sel]
+                no_improve[non_leader_indices[worst_sel]] = 0
+                gbest_no_improve = 0
             for i, (subpop, subpop_vel, _, sp_pbest_pos) in enumerate(subpopulations):
                 if subpop.shape[0] == 0:
                     continue
@@ -295,38 +226,51 @@ class Metaheuristic:
                 *(sp[3] for sp in subpopulations),
                 nsp_pbest_pos
             ))
+
+    def _reinitialize_subset(self, population_subset, velocity_subset):
+        m = population_subset.shape[0]
+        if m == 0:
+            return
+        # random picks with exactly k ones
+        picks = np.zeros((m, self.n), dtype=int)
+        for i in range(m):
+            ones = np.random.choice(self.n, self.k, replace=False)
+            picks[i, ones] = 1
+        population_subset[:, self.n:] = picks
+        # random positions and velocities
+        population_subset[:, :self.n] = np.random.choice(self.B, (m, self.n), replace=True)
+        velocity_subset[:, :self.n] = np.random.uniform(-0.25*self.B, 0.25*self.B, (m, self.n))
+        velocity_subset[:, self.n:] = np.random.uniform(-2.5, 2.5, (m, self.n))
+
+    def _picks_diversity(self, population):
+        if population.shape[0] == 0:
+            return 0.0
+        p = population[:, self.n:].mean(axis=0)
+        return float(4.0 * np.mean(p * (1.0 - p)))
     
-    def __init__(self, time_deadline, problem_path, pop_size=100, sigma=0.5, **kwargs):
-        """
-        Class initializer. It takes as an argument the maximum computation time (in seconds), controlled externally, and the path that contains the problem instance to be solved
-        YOU CAN MODIFY THE HEADER TO INCLUDE OPTIONAL PARAMETERS WITH DEFAULT VALUES ( e.g., __init__(self, time_deadline, problem_path, mut_prob=0.5) )
-        You should configure the algorithm before its execution in this method (i.e., hyperparameter values, data structure initialization, etc.)
-        Args:
-            problem_path: String that contains the path to the file that describes the problem instance
-            time_deadline: Computation time limit for the metaheuristic
-            kwargs: Other arguments can be passed to the algorithm using key-value pairs. For instance, Metaheuristic(20, 'instance1.txt', mut_prob=0.3) would call the initializer with 20 seconds, for reading the instance1.txt file and passing an optional parameter of mut_prob=0.3
-        """
-        self.problem_path = problem_path  # This attribute is meant to contain the path to the problem instance
-        self.best_solution = None  # This attribute is meant to hold, at any time, the best solution found by the algorithm so far. Hence, you should update it accordingly. The solution enconding does not matter.
-        self.time_deadline = (
-            time_deadline  # Computation limit (in seconds) for the metaheuristic
-        )
-        # TODO: Configure the metaheuristic (e.g., selection operator, crossover, mutation, hyperparameter values, etc.)
+    def __init__(self, time_deadline, problem_path, pop_size=100, **kwargs):
+        self.problem_path = problem_path
+        self.best_solution = None
+        self.time_deadline = time_deadline
         self.pop_size = pop_size
-        self.B = kwargs.get('B', 1000)  # upper bound for position values
-        self.sigma = sigma  # standard deviation for gaussian mutation 
+        self.B = kwargs.get('B', 10000)  # upper bound for position values 
         self.pre_ass = kwargs.get('pre_assignment', True)
-        self.similarity_threshold = kwargs.get('similarity_threshold', 0.7)
-        self.n_km_init = kwargs.get('n_km_init', 1)
-        self.max_leaders = kwargs.get('max_leaders', 10)
-        self.max_feasible = kwargs.get('max_feasible', 50000)
-        self.neighbourhood_threshold = kwargs.get('neighbourhood_threshold', 0.1) * self.B
+        self.similarity_threshold = kwargs.get('similarity_threshold', 0.75)
+        self.max_leaders = kwargs.get('max_leaders', 20)
+        self.max_feasible = kwargs.get('max_feasible', 80000)
+        self.neighbourhood_threshold = kwargs.get('neighbourhood_threshold', 0.7) * self.B
         self.iw_max = kwargs.get('iw_max', 1.05)
         self.iw_min = kwargs.get('iw_min', 0.4)
         self.excluded_assets = []
         # Numerical stability controls
         self.eps_norm = kwargs.get('eps_norm', 1e-8)
         self.weight_floor = kwargs.get('weight_floor', 0.001)
+        # Exploration controls
+        self.stagnation_patience = kwargs.get('stagnation_patience', 10)
+        self.gbest_patience = kwargs.get('gbest_patience', 20)
+        self.restart_fraction = kwargs.get('restart_fraction', 0.2)
+        self.diversity_floor = kwargs.get('diversity_floor', 0.22)
+        self.mutation_boost = kwargs.get('mutation_boost', 2.5)
 
     def initialize_population(self, pop_size):
         population = np.zeros((pop_size, self.n*2), dtype=int)
@@ -375,7 +319,7 @@ class Metaheuristic:
                 raise ValueError("Either population or solutions must be provided.")
             solutions = self.get_solutions(population)
         rates = (solutions @ self.d @ solutions.T).diagonal()
-        return rates
+        return rates/2
 
     def get_returns(self, population=None, solutions=None):
         if solutions is None:
