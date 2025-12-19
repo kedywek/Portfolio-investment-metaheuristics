@@ -11,7 +11,7 @@ class PreAssignmentMixin:
 
     def quick_pre_assignment(self):
         D = self.d
-        max_exclusions = self.n - (self.k * 2)
+        max_exclusions = self.n - max(self.k*2, 200)
         if max_exclusions <= 0:
             self.pre_ass = False
             self.excluded_assets = []
@@ -50,8 +50,8 @@ class PreAssignmentMixin:
         return True
 
     def apply_pre_assignment(self):
-        self.full_n = self.n
         self.quick_pre_assignment()
+        self.full_n = self.n
 
         if self.pre_ass and len(self.excluded_assets) > 0:
             self.n -= len(self.excluded_assets)
