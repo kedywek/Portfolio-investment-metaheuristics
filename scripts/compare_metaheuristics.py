@@ -110,9 +110,10 @@ def main(instance: str, deadline: int):
 
         p_color = "blue" if isinstance(met, PSOMeta) else "orange"
         p_style = "--" if met.pre_ass else "-"
-        plt.plot(met_times, met_prog, color=p_color, linestyle=p_style, label=f"{type(met).__name__} (pre_ass={met.pre_ass})")
+        algo_name = "PSO" if isinstance(met, PSOMeta) else "ES"
+        plt.plot(met_times, met_prog, color=p_color, linestyle=p_style, label=f"{algo_name} (pre_ass={met.pre_ass})")
 
-        print(f"{type(met).__name__} (pre_ass={met.pre_ass}):")
+        print(f"{algo_name} (pre_ass={met.pre_ass}):")
         print(f"  Best objective: {met_best_val}")
         print(f"  Return: {met_ret} (target R={getattr(met, 'R', 'n/a')})")
         print(f"  Portfolio size: {met_size} (k={getattr(met, 'k', 'n/a')})")
