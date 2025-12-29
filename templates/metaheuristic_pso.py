@@ -150,23 +150,26 @@ class Metaheuristic(PreAssignmentMixin):
             subpoped_vel = non_leaders_vel[in_threshold]
             subpoped_pbest = non_leaders_pbest[in_threshold]
             subpoped_pbest_pos = non_leaders_pbest_pos[in_threshold]
+            subpoped_orig_indices = non_leader_indices[in_threshold]  # track original indices
             subpopulations = [(
                 subpoped[closest_leader == i], 
                 subpoped_vel[closest_leader == i],
                 subpoped_pbest[closest_leader == i],
-                subpoped_pbest_pos[closest_leader == i]
+                subpoped_pbest_pos[closest_leader == i],
+                subpoped_orig_indices[closest_leader == i]  # include original indices
                 ) for i in range(num_leaders)]
             
             non_subpoped = non_leaders[~in_threshold]
             non_subpoped_vel = non_leaders_vel[~in_threshold]
             nsp_pbest = non_leaders_pbest[~in_threshold]
             nsp_pbest_pos = non_leaders_pbest_pos[~in_threshold]
+            nsp_orig_indices = non_leader_indices[~in_threshold]  # track original indices
 
             # Calculate inertia weight
             iw = self.iw_max - (self.iw_max - self.iw_min) * (total_feasible / self.max_feasible)
 
-            # Calcuate mutation probablility
-            pm = 0.5 * (1 - total_feasible / self.max_feasible)**2
+            # Calcuate mutation probablility (with floor to preserve diversity)
+            pm = max(self.mutation_floor, 0.5 * (1 - total_feasible / self.max_feasible)**2)
             # Diversity-aware boost (normalized in [0,1])
             div = self._picks_diversity(curr_popoulation)
             if div < self.diversity_floor:
@@ -192,7 +195,7 @@ class Metaheuristic(PreAssignmentMixin):
                 non_leaders_pbest_pos[worst_sel] = non_leaders[worst_sel]
                 no_improve[non_leader_indices[worst_sel]] = 0
                 gbest_no_improve = 0
-            for i, (subpop, subpop_vel, _, sp_pbest_pos) in enumerate(subpopulations):
+            for i, (subpop, subpop_vel, _, sp_pbest_pos, _) in enumerate(subpopulations):
                 if subpop.shape[0] == 0:
                     continue
                 self.update_pos_vel(
@@ -212,7 +215,12 @@ class Metaheuristic(PreAssignmentMixin):
                 pm
             )
 
-            # Reconstruct population
+            # Reconstruct population and reorder no_improve to maintain particle identity
+            new_order = np.concatenate([
+                leader_indices,
+                *(sp[4] for sp in subpopulations),
+                nsp_orig_indices
+            ])
             curr_popoulation = np.vstack((
                 leaders,
                 *(sp[0] for sp in subpopulations),
@@ -233,6 +241,8 @@ class Metaheuristic(PreAssignmentMixin):
                 *(sp[3] for sp in subpopulations),
                 nsp_pbest_pos
             ))
+            # Reorder no_improve to match new population order
+            no_improve = no_improve[new_order]
 
     def _reinitialize_subset(self, population_subset, velocity_subset):
         m = population_subset.shape[0]
@@ -278,6 +288,7 @@ class Metaheuristic(PreAssignmentMixin):
         self.restart_fraction = kwargs.get('restart_fraction', 0.2)
         self.diversity_floor = kwargs.get('diversity_floor', 0.22)
         self.mutation_boost = kwargs.get('mutation_boost', 2.5)
+        self.mutation_floor = kwargs.get('mutation_floor', 0.05)
 
     def initialize_population(self, pop_size):
         population = np.zeros((pop_size, self.n*2), dtype=int)
@@ -352,16 +363,18 @@ class Metaheuristic(PreAssignmentMixin):
             2.5
         )
 
-        # Update binary position
-        sigmoid = 1 / (1 + np.exp(-velocity[:, self.n :]))
+        # Update binary position using directional bias (Option B)
+        # Probability of changing the bit: 0 at velocity=0, approaches 1 at high |velocity|
+        change_prob = 1 - np.exp(-np.abs(velocity[:, self.n:]))
+        # Direction: positive velocity wants 1, negative wants 0
+        target = (velocity[:, self.n:] > 0).astype(int)
+        # Only change if random < change_prob AND current differs from target
         rand_vals = np.random.rand(pop_size, self.n)
-        population[:, self.n :] = (rand_vals < sigmoid).astype(int)
-
-        # Enforce exactly k picks per individual by keeping top-k by binary velocity score
-        self.project_picks_to_k(population, velocity)
+        population[:, self.n:] = np.where(rand_vals < change_prob, target, population[:, self.n:])
 
         # Mutate binary position
         self.mutate_binary(population, pm)
+        self.project_picks_to_k(population, velocity)
 
         # Update continuous velocity
         r1 = np.random.rand(pop_size, self.n) + 0.5
@@ -476,7 +489,7 @@ class Metaheuristic(PreAssignmentMixin):
 
         plt.title("Average rate, best rate, and feasible solutions in each epoch")
         fig.tight_layout()
-        plt.savefig("plots/plot.png")
+        plt.savefig("plots/plot_pso.png")
         plt.show()
 
 

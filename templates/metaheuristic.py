@@ -222,18 +222,20 @@ class Metaheuristic(PreAssignmentMixin):
         return new_population, new_rates
 
 
-def draw_graph(v1, v2):
-    import matplotlib.pyplot as plt
+    def draw_graph(self):
+        import matplotlib.pyplot as plt
+        v1 = self.avg_rate_epochs
+        v2 = self.best_rate_epochs
 
-    plt.plot(range(len(v1) - 1), v1[:-1], "o-")
-    plt.plot(range(len(v2) - 1), v2[:-1], "o-")
-    # plt.xscale("log")
-    plt.xlabel("Epochs")
-    plt.ylabel("Rate")
-    plt.title("Average rate and best rate in each epoch")
-    plt.legend(labels=("Average rate", "Best rate"))
-    plt.savefig("plots/plot.png")
-    plt.show()
+        plt.plot(range(len(v1) - 1), v1[:-1], "o-")
+        plt.plot(range(len(v2) - 1), v2[:-1], "o-")
+        # plt.xscale("log")
+        plt.xlabel("Epochs")
+        plt.ylabel("Rate")
+        plt.title("Average rate and best rate in each epoch")
+        plt.legend(labels=("Average rate", "Best rate"))
+        plt.savefig("plots/plot_ga.png")
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -252,4 +254,4 @@ if __name__ == "__main__":
     # print("Best solution found:\n", met.x_best)
     print("Best rate found:", met.q_best)
     print("Best solution found:\n", met.get_best_solution())
-    draw_graph(met.avg_rate_epochs, met.best_rate_epochs)
+    met.draw_graph()
