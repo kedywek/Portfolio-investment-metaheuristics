@@ -43,7 +43,7 @@ class Metaheuristic(PreAssignmentMixin):
         time_deadline,
         problem_path,
         init_temp=1000.0,
-        cool_rate=0.995,
+        cool_rate=0.9995,
         min_temp=0.001,
         **kwargs,
     ):
@@ -55,6 +55,14 @@ class Metaheuristic(PreAssignmentMixin):
         self.cool_rate=cool_rate
         self.min_temp=min_temp
 
+        self.epochs_times = []
+        self.avg_rate_epochs = []
+        self.best_rate_epochs = []
+        self.x_best = None
+        self.q_best = None
+        self.r_best = None
+        self.k_best = None
+
         # init mixin-configurable pre-assignment knobs
         PreAssignmentMixin.__init__(self, **kwargs)
 
@@ -62,7 +70,7 @@ class Metaheuristic(PreAssignmentMixin):
         if self.x_best is None:
             raise Exception("No solution has been found yet.")
 
-        x = self.x_best["decision"].copy()
+        x = self.x_best.copy()
         total = x.sum()
 
         if total > 0:
@@ -84,9 +92,7 @@ class Metaheuristic(PreAssignmentMixin):
 
         curr_energy = self.evaluate(curr_x)
 
-
-
-        self.x_best = curr_x.copy()
+        self.x_best = self.expand_weights(curr_x.copy())
         best_energy = curr_energy
 
         self.avg_rate_epochs = []
@@ -111,8 +117,8 @@ class Metaheuristic(PreAssignmentMixin):
                 curr_energy = neighbor_energy
 
                 if curr_energy < best_energy:
-                best_energy = curr_energy
-                self.x_best = curr_x.copy()
+                    best_energy = curr_energy
+                    self.x_best = self.expand_weights(curr_x.copy())
 
             temp *= self.cool_rate
 
@@ -144,14 +150,14 @@ class Metaheuristic(PreAssignmentMixin):
         # Penalty for too low result
         penalty = 0
         if ret < self.R:
-            penalty += 100000
+            penalty += abs(self.R - ret) * 10
         
         # Penalty for wrong number of 
         # Enforced in get_neighbor, but good to have just in case
         if len(indices) != self.k:
-            penalty += 100000
+            penalty += abs(len(indices) - self.k)
 
-        obj = ret - risk - penalty
+        obj = risk - penalty
 
         # Returning negative objective because SA (Simulated Annealing) minimizes
         return -obj
@@ -171,7 +177,7 @@ class Metaheuristic(PreAssignmentMixin):
                 neighbor[buy_idx] = neighbor[sell_idx]
                 neighbor[sell_idx] = 0.0
             
-            else:
+        else:
             # Transfers smaller amounts between picked stocks
             if len(active_i) > 0:
                 sell_idx, buy_idx = np.random.choice(active_i, 2, replace=False)
