@@ -10,7 +10,7 @@ import sys
 this_dir = Path(__file__).resolve().parent.parent
 if str(this_dir) not in sys.path:
     sys.path.insert(0, str(this_dir))
-from templates.pre_assignment_mixin import PreAssignmentMixin
+from templates.pre_assignment_mixin2 import PreAssignmentMixin
 
 
 class Metaheuristic(PreAssignmentMixin):

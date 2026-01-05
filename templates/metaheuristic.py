@@ -94,14 +94,10 @@ class Metaheuristic(PreAssignmentMixin):
             curr_returns = self.get_returns(solutions=curr_solutions)
             curr_size = self.get_sizes(curr_popoulation)
 
-            return_violation = np.maximum(0, self.R - curr_returns)
-            size_violation = np.abs(curr_size - self.k)
-
-            penalty_multiplier = 1e7
-
-            curr_fitness = curr_rates + (return_violation + size_violation) * penalty_multiplier
-
-            feasible = (return_violation <= 1e-10) & (size_violation == 0)
+            ret_cond = self.R-curr_returns
+            size_cond = np.abs(curr_size - self.k)
+            feasible = (ret_cond <= 0) & (size_cond <= 0)
+            curr_fitness = np.where(feasible, curr_rates, np.maximum(ret_cond, size_cond) + 1)
 
             # Update particle best
             pbest_update = curr_fitness < pbest
@@ -125,7 +121,7 @@ class Metaheuristic(PreAssignmentMixin):
             else:
                 gbest_no_improve += 1
             
-            if iteration % 50 == 0 and self.x_best is not None:
+            if iteration % 200 == 0 and self.x_best is not None:
                 improved_local_x = self.local_search(current_local_best_x)
                 
                 new_div = self.get_rates(solutions=improved_local_x.reshape(1, -1))[0]
@@ -465,22 +461,33 @@ class Metaheuristic(PreAssignmentMixin):
 
     def project_picks_to_k(self, population, velocity):
         n = self.n
-        pop_size = population.shape[0]
+        picks = population[:, n:]
+        scores = velocity[:, n:]
         k = min(self.k, n)
         if k <= 0:
             population[:, n:] = 0
             return
-        scores = velocity[:, n:]
-
-        top_k_indices = np.argpartition(scores, -k, axis=1)[:, -k:]
-
-        new_picks = np.zeros((pop_size, n), dtype=int)
-
-        row_indices = np.arange(pop_size)[:, None]
-        
-        new_picks[row_indices, top_k_indices] = 1
-
-        population[:, n:] = new_picks
+        for i in range(population.shape[0]):
+            s = int(picks[i].sum())
+            if s == k:
+                continue
+            elif s > k:
+                # Remove (s-k) picks: drop those with the lowest scores among current ones
+                ones_idx = np.where(picks[i] == 1)[0]
+                if ones_idx.size > 0:
+                    # number to remove
+                    to_remove = s - k
+                    # find lowest-scoring ones
+                    remove_idx = ones_idx[np.argpartition(scores[i, ones_idx], to_remove-1)[:to_remove]]
+                    picks[i, remove_idx] = 0
+            else:  # s < k
+                # Add (k-s) picks: choose highest scores among current zeros
+                zeros_idx = np.where(picks[i] == 0)[0]
+                if zeros_idx.size > 0:
+                    to_add = k - s
+                    add_idx = zeros_idx[np.argpartition(scores[i, zeros_idx], -to_add)[-to_add:]]
+                    picks[i, add_idx] = 1
+        population[:, n:] = picks
 
     def draw_graph(self):
         import matplotlib.pyplot as plt
@@ -509,52 +516,55 @@ class Metaheuristic(PreAssignmentMixin):
         plt.show()
 
     def initialize_population(self, pop_size):
-        population = np.zeros((pop_size, self.n*2), dtype=int)
-        velocity = np.zeros((pop_size, self.n*2), dtype=float)
+        population = np.zeros((pop_size, self.n * 2), dtype=int)
+        velocity = np.zeros((pop_size, self.n * 2), dtype=float)
         
-        # Obliczamy ranking zachłanny: zwrot * średnia odległość od innych aktywów
-        avg_dist = self.d.mean(axis=1)
+        # 1. Oblicz ranking zachłanny (Greedy Score)
+        # Wykorzystujemy zwrot r i średnią odległość od innych aktywów (dywersyfikacja)
+        avg_dist = self.d.mean(axis=1) 
         greedy_scores = self.r * avg_dist
-        best_greedy_indices = np.argsort(greedy_scores)[-self.k:]
+        
+        # 2. Wyznacz pulę "Top-Tier" (np. 2 razy więcej niż wymagane k)
+        pool_size = min(self.n, self.k * 2)
+        top_tier_indices = np.argsort(greedy_scores)[-pool_size:]
         
         for i in range(pop_size):
-            # 20% populacji dostaje najlepsze aktywa na start (warm-start)
+            # 20% populacji to Warm-Start
             if i < pop_size * 0.2:
-                picks = best_greedy_indices
+                # Losujemy k aktywów Z PULI najlepszych (każdy dostanie inny zestaw!)
+                picks = np.random.choice(top_tier_indices, self.k, replace=False)
             else:
+                # Reszta (80%) to pełna eksploracja - losowanie z całej dostępnej puli n
                 picks = np.random.choice(self.n, self.k, replace=False)
 
-            individual = np.zeros(self.n*2, dtype=int)
-            # Inicjalizacja pozycji (wagi) - zbliżona do logiki z CBIPSO 
+            individual = np.zeros(self.n * 2, dtype=int)
+            # Inicjalizacja pozycji (wagi)
             individual[:self.n] = np.random.choice(self.B, self.n, replace=True)
-            individual[picks + self.n] = 1 # Ustawienie bitów wyboru
+            individual[picks + self.n] = 1 # Ustawienie bitów wyboru aktywów
             
             population[i] = individual
-            # Inicjalizacja prędkości [cite: 241, 242]
-            velocity[i, :self.n] = np.random.uniform(-0.25*self.B, 0.25*self.B, self.n)
+            # Inicjalizacja prędkości
+            velocity[i, :self.n] = np.random.uniform(-0.25 * self.B, 0.25 * self.B, self.n)
             velocity[i, self.n:] = np.random.uniform(-2.5, 2.5, self.n)
             
         return population, velocity
+            
     def local_search(self, solution):
-        """Próbuje poprawić diversity najlepszego rozwiązania przez mikro-korekty wag."""
         best_sol = solution.copy()
         best_div = self.get_rates(solutions=best_sol.reshape(1, -1))[0]
 
-        # Indeksy wybranych aktywów (tych, które mają wagi > 0)
         idx = np.where(best_sol > 0)[0]
         if len(idx) < 2: return best_sol
 
-        for _ in range(100): # Krótka seria prób
+        for _ in range(100): 
             i, j = np.random.choice(idx, 2, replace=False)
             epsilon = np.random.uniform(0.001, 0.01)
             
-            # Testowa zmiana: przesuń wagę z i do j
             test_sol = best_sol.copy()
             if test_sol[i] > epsilon:
                 test_sol[i] -= epsilon
                 test_sol[j] += epsilon
                 
-                # Sprawdź, czy nadal spełnia warunek zwrotu R
                 if (test_sol @ self.r) >= self.R:
                     test_div = self.get_rates(solutions=test_sol.reshape(1, -1))[0]
                     if test_div > best_div:

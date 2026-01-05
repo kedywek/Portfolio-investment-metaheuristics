@@ -40,14 +40,7 @@ def get_label(result: Dict[str, Any], filepath: str) -> str:
     """Generate a human-readable label for a result set."""
     module = result.get("meta_module", "unknown")
     # Extract algorithm name from module path
-    if "pso" in module.lower():
-        algo = "PSO"
-    elif "sa" in module.lower():
-        algo = "SA"
-    elif "metaheuristic" in module.lower():
-        algo = "ES"
-    else:
-        algo = module.split(".")[-1]
+    algo = os.path.basename(filepath).replace(".json", "")
     
     params = result.get("params", {})
     pre_ass = params.get("pre_assignment", False)
