@@ -1,0 +1,177 @@
+{
+  "meta_module": "templates.metaheuristic",
+  "deadline": 60,
+  "repeats": 2,
+  "seed": null,
+  "params": {
+    "pop_size": 30,
+    "pre_assignment": true
+  },
+  "instances_dir": "instances",
+  "timestamp": 1767616616,
+  "git_commit": "a6b9c21d88ca2451fd46d3cbc327502cd7edc23b",
+  "git_branch": "improvements",
+  "git_dirty": true,
+  "instances": {
+    "instance_n1000_k100_15.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 58.39522194862366,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 1000
+        },
+        {
+          "seed": null,
+          "time_sec": 58.38012766838074,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 1000
+        }
+      ],
+      "summary": {
+        "best_objective": null,
+        "mean_objective": null,
+        "median_objective": null,
+        "best_return": null,
+        "best_time": 58.38012766838074,
+        "feasible_rate": null
+      }
+    },
+    "instance_n1000_k50_14.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 58.29806971549988,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 1000
+        },
+        {
+          "seed": null,
+          "time_sec": 58.30075716972351,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 1000
+        }
+      ],
+      "summary": {
+        "best_objective": null,
+        "mean_objective": null,
+        "median_objective": null,
+        "best_return": null,
+        "best_time": 58.29806971549988,
+        "feasible_rate": null
+      }
+    },
+    "instance_n100_k10_7.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 58.01495313644409,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 100
+        },
+        {
+          "seed": null,
+          "time_sec": 58.00719952583313,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 100
+        }
+      ],
+      "summary": {
+        "best_objective": null,
+        "mean_objective": null,
+        "median_objective": null,
+        "best_return": null,
+        "best_time": 58.00719952583313,
+        "feasible_rate": null
+      }
+    },
+    "instance_n100_k5_5.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 58.005046129226685,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 100
+        },
+        {
+          "seed": null,
+          "time_sec": 58.01161813735962,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 0,
+          "full_n": 100
+        }
+      ],
+      "summary": {
+        "best_objective": null,
+        "mean_objective": null,
+        "median_objective": null,
+        "best_return": null,
+        "best_time": 58.005046129226685,
+        "feasible_rate": null
+      }
+    },
+    "instance_n500_k25_9.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 58.38893532752991,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 10,
+          "full_n": 500
+        },
+        {
+          "seed": null,
+          "time_sec": 58.120012521743774,
+          "objective": null,
+          "ret": null,
+          "size": null,
+          "feasible": null,
+          "excluded_assets": 10,
+          "full_n": 500
+        }
+      ],
+      "summary": {
+        "best_objective": null,
+        "mean_objective": null,
+        "median_objective": null,
+        "best_return": null,
+        "best_time": 58.120012521743774,
+        "feasible_rate": null
+      }
+    }
+  }
+}
