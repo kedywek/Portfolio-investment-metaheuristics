@@ -4,14 +4,18 @@ class PreAssignmentMixin:
     def __init__(self, **kwargs):
         self.pre_ass = kwargs.get('pre_assignment', True)
         self.similarity_threshold = kwargs.get('similarity_threshold', 0.7)
-        self.n_km_init = kwargs.get('n_km_init', 1)
+        self.min_features = kwargs.get('min_features', 200)
+        self.k_mult_features = kwargs.get('k_mult_features', 2)
+        # Weight for balancing diversification vs return in priority scoring
+        # Higher values prioritize diversification potential over returns
+        self.div_weight = kwargs.get('div_weight', 0.7)
         self.excluded_assets = []
         self.used_assets = []
         self.full_n = None
 
     def quick_pre_assignment(self):
         D = self.d
-        max_exclusions = self.n - max(self.k*2, 200)
+        max_exclusions = self.n - max(self.k*self.k_mult_features, self.min_features)
         if max_exclusions <= 0:
             self.pre_ass = False
             self.excluded_assets = []
@@ -23,7 +27,21 @@ class PreAssignmentMixin:
         X = (D / safe_norms).T
         S = np.clip((X @ X.T), -1.0, 1.0)
 
-        sorted_indices = sorted(range(self.n), key=lambda x: -self.r[x])
+        # Calculate diversification potential: average distance to all other assets
+        # Higher values = more unique/diverse asset (contributes more to objective)
+        div_potential = D.mean(axis=1)
+        
+        # Normalize both metrics to [0, 1] for fair combination
+        r_norm = (self.r - self.r.min()) / (self.r.max() - self.r.min() + 1e-10)
+        div_norm = (div_potential - div_potential.min()) / (div_potential.max() - div_potential.min() + 1e-10)
+        
+        # Combined score: balance diversification potential and returns
+        # We need returns to meet constraint R, but diversification is the objective
+        combined_score = self.div_weight * div_norm + (1 - self.div_weight) * r_norm
+        
+        # Sort by combined score (highest first = most valuable to keep)
+        sorted_indices = sorted(range(self.n), key=lambda x: -combined_score[x])
+        
         while not self.run_quick_pa(S, max_exclusions, sorted_indices, self.similarity_threshold):
             self.similarity_threshold += 0.005
             if self.similarity_threshold > 1.0:
