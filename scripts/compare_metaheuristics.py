@@ -23,12 +23,12 @@ if TEMPLATES_DIR not in sys.path:
 
 # Import both metaheuristics
 try:
-    from templates.metaheuristic import Metaheuristic as ESMeta
+    from templates.metaheuristic import Metaheuristic as IMPR
 except Exception as e:
     raise ImportError(f"Failed to import ES metaheuristic from templates/metaheuristic.py: {e}")
 
 try:
-    from templates.metaheuristic_pso import Metaheuristic as PSOMeta
+    from templates.metaheuristic_pso import Metaheuristic as ORG
 except Exception as e:
     raise ImportError(f"Failed to import PSO metaheuristic from templates/metaheuristic_pso.py: {e}")
 
@@ -52,27 +52,25 @@ def compute_metrics(weights: np.ndarray, r: np.ndarray, k_target: int):
 @click.option("-d", "--deadline", type=int, default=15, help="Execution deadline in seconds for each algorithm")
 def main(instance: str, deadline: int):
     tests = [
-        ESMeta(
+        IMPR(
             time_deadline=deadline,
             problem_path=instance,
-            pop_size=20,
-            children_size=140,
+            pop_size=30,
             pre_assignment=False,
         ),
-        ESMeta(
+        IMPR(
             time_deadline=deadline,
             problem_path=instance,
-            pop_size=20,
-            children_size=140,
+            pop_size=30,
             pre_assignment=True,
         ),
-        PSOMeta(
+        ORG(
             time_deadline=deadline,
             problem_path=instance,
             pop_size=1000,
             pre_assignment=False,
         ),
-        PSOMeta(
+        ORG(
             time_deadline=deadline,
             problem_path=instance,
             pop_size=1000,
@@ -103,14 +101,12 @@ def main(instance: str, deadline: int):
         met_ret, met_size = compute_metrics(met_weights, met.expand_weights(met.r), met.k)
 
         met_prog = list(getattr(met, "best_rate_epochs", []))
-        if isinstance(met, PSOMeta):
-            # PSO best_rate_epochs stores fitness (lower is better); convert to objective value
-            met_prog = [-x for x in met_prog]
+        met_prog = [-x for x in met_prog]
         met_times = list(getattr(met, "epochs_times", []))
 
-        p_color = "blue" if isinstance(met, PSOMeta) else "orange"
+        p_color = "blue" if isinstance(met, IMPR) else "orange"
         p_style = "--" if met.pre_ass else "-"
-        algo_name = "PSO" if isinstance(met, PSOMeta) else "ES"
+        algo_name = "IMPR" if isinstance(met, IMPR) else "ORG"
         plt.plot(met_times, met_prog, color=p_color, linestyle=p_style, label=f"{algo_name} (pre_ass={met.pre_ass})")
 
         print(f"{algo_name} (pre_ass={met.pre_ass}):")

@@ -85,7 +85,9 @@ class Metaheuristic(PreAssignmentMixin):
         self.avg_rate_epochs = []
         self.feasible_epochs = []
         start_time = time.time()
-        while total_feasible < self.max_feasible:
+        total_time_allowed = self.time_deadline - 2.0
+        while (time.time() - start_time) < total_time_allowed:
+            elapsed_ratio = (time.time() - start_time) / total_time_allowed
             # Calculate fitness
             curr_solutions = self.get_solutions(curr_popoulation)
             curr_rates = -self.get_rates(solutions=curr_solutions)
@@ -180,15 +182,10 @@ class Metaheuristic(PreAssignmentMixin):
             ]  # track original indices
 
             # Calculate inertia weight
-            iw = self.iw_max - (self.iw_max - self.iw_min) * (
-                total_feasible / self.max_feasible
-            )
+            iw = self.iw_max - (self.iw_max - self.iw_min) * elapsed_ratio
 
             # Calcuate mutation probablility (with floor to preserve diversity)
-            pm = max(
-                self.mutation_floor,
-                0.5 * (1 - total_feasible / self.max_feasible) ** 2,
-            )
+            pm = max(self.mutation_floor, 0.5 * (1 - elapsed_ratio) ** 2)
             # Diversity-aware boost (normalized in [0,1])
             div = self._picks_diversity(curr_popoulation)
             if div < self.diversity_floor:

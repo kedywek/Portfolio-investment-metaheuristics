@@ -1,0 +1,237 @@
+{
+  "meta_module": "templates.metaheuristic_impr1",
+  "deadline": 15,
+  "repeats": 1,
+  "seed": null,
+  "params": {
+    "pop_size": 30,
+    "pre_assignment": true
+  },
+  "instances_dir": "instances",
+  "timestamp": 1767624153,
+  "git_commit": "7ede01464d93a7e16acef9b7da23ea167834cc73",
+  "git_branch": "improvements",
+  "git_dirty": true,
+  "instances": {
+    "instance_n1000_k100_15.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.34053373336792,
+          "objective": 0.28978967924720245,
+          "ret": 2.218828989732805,
+          "size": 100,
+          "feasible": true,
+          "excluded_assets": 747,
+          "full_n": 1000
+        }
+      ],
+      "summary": {
+        "best_objective": 0.28978967924720245,
+        "mean_objective": 0.28978967924720245,
+        "median_objective": 0.28978967924720245,
+        "best_return": 2.218828989732805,
+        "best_time": 13.34053373336792,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n1000_k50_14.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.41271710395813,
+          "objective": 0.3632886081381526,
+          "ret": 2.253163318941983,
+          "size": 50,
+          "feasible": true,
+          "excluded_assets": 658,
+          "full_n": 1000
+        }
+      ],
+      "summary": {
+        "best_objective": 0.3632886081381526,
+        "mean_objective": 0.3632886081381526,
+        "median_objective": 0.3632886081381526,
+        "best_return": 2.253163318941983,
+        "best_time": 13.41271710395813,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n100_k10_7.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.007211685180664,
+          "objective": 0.3299794536112239,
+          "ret": 1.9119182718180137,
+          "size": 10,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 100
+        }
+      ],
+      "summary": {
+        "best_objective": 0.3299794536112239,
+        "mean_objective": 0.3299794536112239,
+        "median_objective": 0.3299794536112239,
+        "best_return": 1.9119182718180137,
+        "best_time": 13.007211685180664,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n100_k5_5.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.004605531692505,
+          "objective": 0.3097479890727622,
+          "ret": 1.8070937564229357,
+          "size": 5,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 100
+        }
+      ],
+      "summary": {
+        "best_objective": 0.3097479890727622,
+        "mean_objective": 0.3097479890727622,
+        "median_objective": 0.3097479890727622,
+        "best_return": 1.8070937564229357,
+        "best_time": 13.004605531692505,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n500_k25_9.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.095986604690552,
+          "objective": 0.3309754536310609,
+          "ret": 1.9469370559633903,
+          "size": 25,
+          "feasible": true,
+          "excluded_assets": 299,
+          "full_n": 500
+        }
+      ],
+      "summary": {
+        "best_objective": 0.3309754536310609,
+        "mean_objective": 0.3309754536310609,
+        "median_objective": 0.3309754536310609,
+        "best_return": 1.9469370559633903,
+        "best_time": 13.095986604690552,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n500_k50_12.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.12682843208313,
+          "objective": 0.3590963056093432,
+          "ret": 2.3109263341401944,
+          "size": 50,
+          "feasible": true,
+          "excluded_assets": 283,
+          "full_n": 500
+        }
+      ],
+      "summary": {
+        "best_objective": 0.3590963056093432,
+        "mean_objective": 0.3590963056093432,
+        "median_objective": 0.3590963056093432,
+        "best_return": 2.3109263341401944,
+        "best_time": 13.12682843208313,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n50_k2_1.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.003249168395996,
+          "objective": 0.23333749999999998,
+          "ret": 1.83955,
+          "size": 2,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 50
+        }
+      ],
+      "summary": {
+        "best_objective": 0.23333749999999998,
+        "mean_objective": 0.23333749999999998,
+        "median_objective": 0.23333749999999998,
+        "best_return": 1.83955,
+        "best_time": 13.003249168395996,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n50_k2_2.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.00316309928894,
+          "objective": 0.2279,
+          "ret": 1.8154,
+          "size": 2,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 50
+        }
+      ],
+      "summary": {
+        "best_objective": 0.2279,
+        "mean_objective": 0.2279,
+        "median_objective": 0.2279,
+        "best_return": 1.8154,
+        "best_time": 13.00316309928894,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_n50_k5_4.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.004332304000854,
+          "objective": 0.2731512994552573,
+          "ret": 1.6188709012446818,
+          "size": 5,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 50
+        }
+      ],
+      "summary": {
+        "best_objective": 0.2731512994552573,
+        "mean_objective": 0.2731512994552573,
+        "median_objective": 0.2731512994552573,
+        "best_return": 1.6188709012446818,
+        "best_time": 13.004332304000854,
+        "feasible_rate": 1.0
+      }
+    },
+    "instance_test.json": {
+      "runs": [
+        {
+          "seed": null,
+          "time_sec": 13.003798007965088,
+          "objective": 0.2225,
+          "ret": 1.15,
+          "size": 2,
+          "feasible": true,
+          "excluded_assets": 0,
+          "full_n": 4
+        }
+      ],
+      "summary": {
+        "best_objective": 0.2225,
+        "mean_objective": 0.2225,
+        "median_objective": 0.2225,
+        "best_return": 1.15,
+        "best_time": 13.003798007965088,
+        "feasible_rate": 1.0
+      }
+    }
+  }
+}
