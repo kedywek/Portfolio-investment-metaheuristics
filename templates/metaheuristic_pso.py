@@ -5,6 +5,7 @@ from scipy.spatial.distance import cdist
 
 from pathlib import Path
 import sys
+
 # Ensure we can import from templates/
 this_dir = Path(__file__).resolve().parent.parent
 if str(this_dir) not in sys.path:
@@ -38,7 +39,7 @@ class Metaheuristic(PreAssignmentMixin):
         self.R = instance_data["R"]
         self.r = np.array(instance_data["r"])
         self.d = np.array(instance_data["dij"])
-    
+
     def set_x_best(self, x_best):
         self.x_best = self.expand_weights(x_best) if self.pre_ass else x_best
 
@@ -90,10 +91,12 @@ class Metaheuristic(PreAssignmentMixin):
             curr_rates = -self.get_rates(solutions=curr_solutions)
             curr_returns = self.get_returns(solutions=curr_solutions)
             curr_size = self.get_sizes(curr_popoulation)
-            ret_cond = self.R-curr_returns
+            ret_cond = self.R - curr_returns
             size_cond = np.abs(curr_size - self.k)
             feasible = (ret_cond <= 0) & (size_cond <= 0)
-            curr_fitness = np.where(feasible, curr_rates, np.maximum(ret_cond, size_cond) + 1)
+            curr_fitness = np.where(
+                feasible, curr_rates, np.maximum(ret_cond, size_cond) + 1
+            )
 
             # Update particle best
             pbest_update = curr_fitness < pbest
@@ -115,7 +118,7 @@ class Metaheuristic(PreAssignmentMixin):
                 gbest_no_improve = 0
             else:
                 gbest_no_improve += 1
-            
+
             # Record stats
             self.best_rate_epochs.append(gbest)
             self.epochs_times.append(time.time() - start_time)
@@ -143,33 +146,49 @@ class Metaheuristic(PreAssignmentMixin):
             non_leader_indices = np.where(non_leader_mask)[0]
 
             # Construct subpopulations around leaders (with thresholding)
-            distances = cdist(non_leaders[:, :self.n], leaders[:, :self.n], metric='euclidean')
+            distances = cdist(
+                non_leaders[:, : self.n], leaders[:, : self.n], metric="euclidean"
+            )
             in_threshold = np.min(distances, axis=1) < self.neighbourhood_threshold
             closest_leader = np.argmin(distances[in_threshold], axis=1)
             subpoped = non_leaders[in_threshold]
             subpoped_vel = non_leaders_vel[in_threshold]
             subpoped_pbest = non_leaders_pbest[in_threshold]
             subpoped_pbest_pos = non_leaders_pbest_pos[in_threshold]
-            subpoped_orig_indices = non_leader_indices[in_threshold]  # track original indices
-            subpopulations = [(
-                subpoped[closest_leader == i], 
-                subpoped_vel[closest_leader == i],
-                subpoped_pbest[closest_leader == i],
-                subpoped_pbest_pos[closest_leader == i],
-                subpoped_orig_indices[closest_leader == i]  # include original indices
-                ) for i in range(num_leaders)]
-            
+            subpoped_orig_indices = non_leader_indices[
+                in_threshold
+            ]  # track original indices
+            subpopulations = [
+                (
+                    subpoped[closest_leader == i],
+                    subpoped_vel[closest_leader == i],
+                    subpoped_pbest[closest_leader == i],
+                    subpoped_pbest_pos[closest_leader == i],
+                    subpoped_orig_indices[
+                        closest_leader == i
+                    ],  # include original indices
+                )
+                for i in range(num_leaders)
+            ]
+
             non_subpoped = non_leaders[~in_threshold]
             non_subpoped_vel = non_leaders_vel[~in_threshold]
             nsp_pbest = non_leaders_pbest[~in_threshold]
             nsp_pbest_pos = non_leaders_pbest_pos[~in_threshold]
-            nsp_orig_indices = non_leader_indices[~in_threshold]  # track original indices
+            nsp_orig_indices = non_leader_indices[
+                ~in_threshold
+            ]  # track original indices
 
             # Calculate inertia weight
-            iw = self.iw_max - (self.iw_max - self.iw_min) * (total_feasible / self.max_feasible)
+            iw = self.iw_max - (self.iw_max - self.iw_min) * (
+                total_feasible / self.max_feasible
+            )
 
             # Calcuate mutation probablility (with floor to preserve diversity)
-            pm = max(self.mutation_floor, 0.5 * (1 - total_feasible / self.max_feasible)**2)
+            pm = max(
+                self.mutation_floor,
+                0.5 * (1 - total_feasible / self.max_feasible) ** 2,
+            )
             # Diversity-aware boost (normalized in [0,1])
             div = self._picks_diversity(curr_popoulation)
             if div < self.diversity_floor:
@@ -177,11 +196,17 @@ class Metaheuristic(PreAssignmentMixin):
 
             # Reinitialize stagnant non-leaders to escape local traps
             if non_leaders.shape[0] > 0:
-                stagnant_mask_nl = no_improve[non_leader_indices] >= self.stagnation_patience
+                stagnant_mask_nl = (
+                    no_improve[non_leader_indices] >= self.stagnation_patience
+                )
                 if np.any(stagnant_mask_nl):
-                    self._reinitialize_subset(non_leaders[stagnant_mask_nl], non_leaders_vel[stagnant_mask_nl])
+                    self._reinitialize_subset(
+                        non_leaders[stagnant_mask_nl], non_leaders_vel[stagnant_mask_nl]
+                    )
                     non_leaders_pbest[stagnant_mask_nl] = np.inf
-                    non_leaders_pbest_pos[stagnant_mask_nl] = non_leaders[stagnant_mask_nl]
+                    non_leaders_pbest_pos[stagnant_mask_nl] = non_leaders[
+                        stagnant_mask_nl
+                    ]
                     no_improve[non_leader_indices[stagnant_mask_nl]] = 0
 
             # Inject random immigrants if gbest stagnates
@@ -190,57 +215,45 @@ class Metaheuristic(PreAssignmentMixin):
                 # choose worst non-leaders by current fitness
                 order_nl = np.argsort(curr_fitness[non_leader_indices])
                 worst_sel = order_nl[-num_imm:]
-                self._reinitialize_subset(non_leaders[worst_sel], non_leaders_vel[worst_sel])
+                self._reinitialize_subset(
+                    non_leaders[worst_sel], non_leaders_vel[worst_sel]
+                )
                 non_leaders_pbest[worst_sel] = np.inf
                 non_leaders_pbest_pos[worst_sel] = non_leaders[worst_sel]
                 no_improve[non_leader_indices[worst_sel]] = 0
                 gbest_no_improve = 0
-            for i, (subpop, subpop_vel, _, sp_pbest_pos, _) in enumerate(subpopulations):
+            for i, (subpop, subpop_vel, _, sp_pbest_pos, _) in enumerate(
+                subpopulations
+            ):
                 if subpop.shape[0] == 0:
                     continue
                 self.update_pos_vel(
-                    subpop,
-                    subpop_vel,
-                    sp_pbest_pos,
-                    leaders_pbest_pos[i],
-                    iw,
-                    pm
+                    subpop, subpop_vel, sp_pbest_pos, leaders_pbest_pos[i], iw, pm
                 )
             self.update_pos_vel(
-                non_subpoped,
-                non_subpoped_vel,
-                nsp_pbest_pos,
-                gbest_pos,
-                iw,
-                pm
+                non_subpoped, non_subpoped_vel, nsp_pbest_pos, gbest_pos, iw, pm
             )
 
             # Reconstruct population and reorder no_improve to maintain particle identity
-            new_order = np.concatenate([
-                leader_indices,
-                *(sp[4] for sp in subpopulations),
-                nsp_orig_indices
-            ])
-            curr_popoulation = np.vstack((
-                leaders,
-                *(sp[0] for sp in subpopulations),
-                non_subpoped
-            ))
-            curr_velocity = np.vstack((
-                np.zeros((num_leaders, self.n*2)),
-                *(sp[1] for sp in subpopulations),
-                non_subpoped_vel
-            ))
-            pbest = np.concatenate((
-                leaders_pbest,
-                *(sp[2] for sp in subpopulations),
-                nsp_pbest
-            ))
-            pbest_pos = np.vstack((
-                leaders_pbest_pos,
-                *(sp[3] for sp in subpopulations),
-                nsp_pbest_pos
-            ))
+            new_order = np.concatenate(
+                [leader_indices, *(sp[4] for sp in subpopulations), nsp_orig_indices]
+            )
+            curr_popoulation = np.vstack(
+                (leaders, *(sp[0] for sp in subpopulations), non_subpoped)
+            )
+            curr_velocity = np.vstack(
+                (
+                    np.zeros((num_leaders, self.n * 2)),
+                    *(sp[1] for sp in subpopulations),
+                    non_subpoped_vel,
+                )
+            )
+            pbest = np.concatenate(
+                (leaders_pbest, *(sp[2] for sp in subpopulations), nsp_pbest)
+            )
+            pbest_pos = np.vstack(
+                (leaders_pbest_pos, *(sp[3] for sp in subpopulations), nsp_pbest_pos)
+            )
             # Reorder no_improve to match new population order
             no_improve = no_improve[new_order]
 
@@ -253,71 +266,77 @@ class Metaheuristic(PreAssignmentMixin):
         for i in range(m):
             ones = np.random.choice(self.n, self.k, replace=False)
             picks[i, ones] = 1
-        population_subset[:, self.n:] = picks
+        population_subset[:, self.n :] = picks
         # random positions and velocities
-        population_subset[:, :self.n] = np.random.choice(self.B, (m, self.n), replace=True)
-        velocity_subset[:, :self.n] = np.random.uniform(-0.25*self.B, 0.25*self.B, (m, self.n))
-        velocity_subset[:, self.n:] = np.random.uniform(-2.5, 2.5, (m, self.n))
+        population_subset[:, : self.n] = np.random.choice(
+            self.B, (m, self.n), replace=True
+        )
+        velocity_subset[:, : self.n] = np.random.uniform(
+            -0.25 * self.B, 0.25 * self.B, (m, self.n)
+        )
+        velocity_subset[:, self.n :] = np.random.uniform(-2.5, 2.5, (m, self.n))
 
     def _picks_diversity(self, population):
         if population.shape[0] == 0:
             return 0.0
-        p = population[:, self.n:].mean(axis=0)
+        p = population[:, self.n :].mean(axis=0)
         return float(4.0 * np.mean(p * (1.0 - p)))
-    
+
     def __init__(self, time_deadline, problem_path, pop_size=100, **kwargs):
         self.problem_path = problem_path
         self.best_solution = None
         self.time_deadline = time_deadline
         self.pop_size = pop_size
-        self.B = kwargs.get('B', 10000)  # upper bound for position values 
-        self.pre_ass = kwargs.get('pre_assignment', True)
-        self.similarity_threshold = kwargs.get('similarity_threshold', 0.75)
-        self.max_leaders = kwargs.get('max_leaders', 20)
-        self.max_feasible = kwargs.get('max_feasible', 80000)
-        self.neighbourhood_threshold = kwargs.get('neighbourhood_threshold', 0.7) * self.B
-        self.iw_max = kwargs.get('iw_max', 1.05)
-        self.iw_min = kwargs.get('iw_min', 0.4)
+        self.B = kwargs.get("B", 10000)  # upper bound for position values
+        self.pre_ass = kwargs.get("pre_assignment", True)
+        self.similarity_threshold = kwargs.get("similarity_threshold", 0.75)
+        self.max_leaders = kwargs.get("max_leaders", 20)
+        self.max_feasible = kwargs.get("max_feasible", 80000)
+        self.neighbourhood_threshold = (
+            kwargs.get("neighbourhood_threshold", 0.7) * self.B
+        )
+        self.iw_max = kwargs.get("iw_max", 1.05)
+        self.iw_min = kwargs.get("iw_min", 0.4)
         self.excluded_assets = []
         # Numerical stability controls
-        self.eps_norm = kwargs.get('eps_norm', 1e-8)
-        self.weight_floor = kwargs.get('weight_floor', 0.001)
+        self.eps_norm = kwargs.get("eps_norm", 1e-8)
+        self.weight_floor = kwargs.get("weight_floor", 0.001)
         # Exploration controls
-        self.stagnation_patience = kwargs.get('stagnation_patience', 10)
-        self.gbest_patience = kwargs.get('gbest_patience', 20)
-        self.restart_fraction = kwargs.get('restart_fraction', 0.2)
-        self.diversity_floor = kwargs.get('diversity_floor', 0.22)
-        self.mutation_boost = kwargs.get('mutation_boost', 2.5)
-        self.mutation_floor = kwargs.get('mutation_floor', 0.05)
+        self.stagnation_patience = kwargs.get("stagnation_patience", 10)
+        self.gbest_patience = kwargs.get("gbest_patience", 20)
+        self.restart_fraction = kwargs.get("restart_fraction", 0.2)
+        self.diversity_floor = kwargs.get("diversity_floor", 0.22)
+        self.mutation_boost = kwargs.get("mutation_boost", 2.5)
+        self.mutation_floor = kwargs.get("mutation_floor", 0.05)
 
     def initialize_population(self, pop_size):
-        population = np.zeros((pop_size, self.n*2), dtype=int)
-        velocity = np.zeros((pop_size, self.n*2), dtype=float)
+        population = np.zeros((pop_size, self.n * 2), dtype=int)
+        velocity = np.zeros((pop_size, self.n * 2), dtype=float)
         for i in range(pop_size):
-            individual = np.zeros(self.n*2, dtype=int)
-            individual_vel = np.zeros(self.n*2, dtype=float)
+            individual = np.zeros(self.n * 2, dtype=int)
+            individual_vel = np.zeros(self.n * 2, dtype=float)
 
             pos = np.random.choice(self.B, self.n, replace=True)
-            individual[:self.n] = pos
+            individual[: self.n] = pos
 
             picks = np.random.choice(self.n, self.k, replace=False) + self.n
             individual[picks] = 1
 
-            vels = np.random.uniform(-0.25*self.B, 0.25*self.B, self.n)
-            individual_vel[:self.n] = vels
+            vels = np.random.uniform(-0.25 * self.B, 0.25 * self.B, self.n)
+            individual_vel[: self.n] = vels
 
             pick_vels = np.random.uniform(-2.5, 2.5, self.n)
-            individual_vel[self.n:] = pick_vels
+            individual_vel[self.n :] = pick_vels
 
             population[i] = individual
             velocity[i] = individual_vel
         return population, velocity
-    
+
     def get_sizes(self, population):
-        picks = population[:, self.n:] & (population[:, :self.n] > 0)
+        picks = population[:, self.n :] & (population[:, : self.n] > 0)
         sizes = picks.sum(axis=1)
         return sizes
-    
+
     def get_solutions(self, population):
         placings = population[:, : self.n] * population[:, self.n :]
         sums = placings.sum(axis=1, keepdims=True)
@@ -325,10 +344,12 @@ class Metaheuristic(PreAssignmentMixin):
         solutions = placings / sums
         # Apply floor to avoid vanishing weights, then renormalize
         if self.weight_floor > 0.0:
-            solutions = np.where(solutions > 0, np.maximum(solutions, self.weight_floor), 0.0)
+            solutions = np.where(
+                solutions > 0, np.maximum(solutions, self.weight_floor), 0.0
+            )
             total = solutions.sum(axis=1)
             mask = total > 0
-            solutions[mask,:] = solutions[mask,:] / total[mask].reshape(-1,1)
+            solutions[mask, :] = solutions[mask, :] / total[mask].reshape(-1, 1)
         return solutions
 
     def get_rates(self, population=None, solutions=None):
@@ -337,7 +358,7 @@ class Metaheuristic(PreAssignmentMixin):
                 raise ValueError("Either population or solutions must be provided.")
             solutions = self.get_solutions(population)
         rates = (solutions @ self.d @ solutions.T).diagonal()
-        return rates/2
+        return rates / 2
 
     def get_returns(self, population=None, solutions=None):
         if solutions is None:
@@ -346,7 +367,7 @@ class Metaheuristic(PreAssignmentMixin):
             solutions = self.get_solutions(population)
         returns = solutions @ self.r
         return returns
-    
+
     def update_pos_vel(self, population, velocity, pbest, gbest, iw, pm):
         pop_size = population.shape[0]
         c1 = 1.496
@@ -355,22 +376,24 @@ class Metaheuristic(PreAssignmentMixin):
         # Update binary velocity
         r1 = np.random.rand(pop_size, self.n)
         r2 = np.random.rand(pop_size, self.n)
-        velocity[:, self.n:] = np.clip(
+        velocity[:, self.n :] = np.clip(
             iw * velocity[:, self.n :]
             + c1 * r1 * (pbest[:, self.n :] - population[:, self.n :])
             + c2 * r2 * (gbest[self.n :] - population[:, self.n :]),
             -2.5,
-            2.5
+            2.5,
         )
 
         # Update binary position using directional bias (Option B)
         # Probability of changing the bit: 0 at velocity=0, approaches 1 at high |velocity|
-        change_prob = 1 - np.exp(-np.abs(velocity[:, self.n:]))
+        change_prob = 1 - np.exp(-np.abs(velocity[:, self.n :]))
         # Direction: positive velocity wants 1, negative wants 0
-        target = (velocity[:, self.n:] > 0).astype(int)
+        target = (velocity[:, self.n :] > 0).astype(int)
         # Only change if random < change_prob AND current differs from target
         rand_vals = np.random.rand(pop_size, self.n)
-        population[:, self.n:] = np.where(rand_vals < change_prob, target, population[:, self.n:])
+        population[:, self.n :] = np.where(
+            rand_vals < change_prob, target, population[:, self.n :]
+        )
 
         # Mutate binary position
         self.mutate_binary(population, pm)
@@ -388,53 +411,57 @@ class Metaheuristic(PreAssignmentMixin):
         )
 
         # Update continuous position
-        population[:, : self.n] = np.clip(np.where(
-            population[:, self.n :],
-            population[:, : self.n] 
-            + velocity[:, : self.n],
-            population[:, : self.n]),
+        population[:, : self.n] = np.clip(
+            np.where(
+                population[:, self.n :],
+                population[:, : self.n] + velocity[:, : self.n],
+                population[:, : self.n],
+            ),
             0,
-            self.B
+            self.B,
         )
 
         # Mutate continuous
-        mutation_mask = np.random.rand(pop_size, self.n) < pm*0.2
-        velocity[:, : self.n] = np.clip(np.where(
-            mutation_mask&population[:, self.n :],
-            velocity[:, : self.n]
-            *(np.random.rand(pop_size, self.n)-0.5)*4,
-            velocity[:, : self.n]
-        ), -0.25 * self.B, 0.25 * self.B)
-        population[:, : self.n] = np.clip(np.where(
-            mutation_mask&population[:, self.n :],
-            population[:, : self.n] 
-            + velocity[:, : self.n],
-            population[:, : self.n]),
-            0,
-            self.B
+        mutation_mask = np.random.rand(pop_size, self.n) < pm * 0.2
+        velocity[:, : self.n] = np.clip(
+            np.where(
+                mutation_mask & population[:, self.n :],
+                velocity[:, : self.n] * (np.random.rand(pop_size, self.n) - 0.5) * 4,
+                velocity[:, : self.n],
+            ),
+            -0.25 * self.B,
+            0.25 * self.B,
         )
-
+        population[:, : self.n] = np.clip(
+            np.where(
+                mutation_mask & population[:, self.n :],
+                population[:, : self.n] + velocity[:, : self.n],
+                population[:, : self.n],
+            ),
+            0,
+            self.B,
+        )
 
     def mutate_binary(self, population, pm):
         pop_size = population.shape[0]
-        picks = population[:, self.n:]
+        picks = population[:, self.n :]
         picks_sum = picks.sum(axis=1)
         rng = np.random.default_rng()
         mutation_mask = (
-            (rng.random(pop_size) < pm)
-            & (picks_sum > 0)
-            & (picks_sum <= self.k)
+            (rng.random(pop_size) < pm) & (picks_sum > 0) & (picks_sum <= self.k)
         )
-        for i in range(pop_size):
-            if not mutation_mask[i]:
-                continue
+        idx = np.where(mutation_mask)[0]
+        if idx.size == 0:
+            return
+
+        for i in idx:
             ones = np.where(picks[i] == 1)[0]
             zeros = np.where(picks[i] == 0)[0]
             a = rng.choice(ones)
             b = rng.choice(zeros)
             picks[i, a] = 0
             picks[i, b] = 1
-        population[:, self.n:] = picks
+        population[:, self.n :] = picks
 
     def project_picks_to_k(self, population, velocity):
         n = self.n
@@ -444,25 +471,31 @@ class Metaheuristic(PreAssignmentMixin):
         if k <= 0:
             population[:, n:] = 0
             return
-        for i in range(population.shape[0]):
-            s = int(picks[i].sum())
-            if s == k:
-                continue
-            elif s > k:
+        picks_sum = picks.sum(axis=1)
+        need_fix = picks_sum != k
+        idx = np.where(need_fix)[0]
+
+        for i in idx:
+            s = int(picks_sum[i])
+            if s > k:
                 # Remove (s-k) picks: drop those with the lowest scores among current ones
                 ones_idx = np.where(picks[i] == 1)[0]
                 if ones_idx.size > 0:
                     # number to remove
                     to_remove = s - k
                     # find lowest-scoring ones
-                    remove_idx = ones_idx[np.argpartition(scores[i, ones_idx], to_remove-1)[:to_remove]]
+                    remove_idx = ones_idx[
+                        np.argpartition(scores[i, ones_idx], to_remove - 1)[:to_remove]
+                    ]
                     picks[i, remove_idx] = 0
             else:  # s < k
                 # Add (k-s) picks: choose highest scores among current zeros
                 zeros_idx = np.where(picks[i] == 0)[0]
                 if zeros_idx.size > 0:
                     to_add = k - s
-                    add_idx = zeros_idx[np.argpartition(scores[i, zeros_idx], -to_add)[-to_add:]]
+                    add_idx = zeros_idx[
+                        np.argpartition(scores[i, zeros_idx], -to_add)[-to_add:]
+                    ]
                     picks[i, add_idx] = 1
         population[:, n:] = picks
 
@@ -472,20 +505,36 @@ class Metaheuristic(PreAssignmentMixin):
         fig, ax1 = plt.subplots()
 
         # Plot rates on the primary y-axis
-        ax1.plot(range(len(self.avg_rate_epochs) - 1), self.avg_rate_epochs[:-1], "o-", label="Average rate")
-        ax1.plot(range(len(self.best_rate_epochs) - 1), self.best_rate_epochs[:-1], "o-", label="Best rate")
+        ax1.plot(
+            range(len(self.avg_rate_epochs) - 1),
+            self.avg_rate_epochs[:-1],
+            "o-",
+            label="Average rate",
+        )
+        ax1.plot(
+            range(len(self.best_rate_epochs) - 1),
+            self.best_rate_epochs[:-1],
+            "o-",
+            label="Best rate",
+        )
         ax1.set_xlabel("Epochs")
         ax1.set_ylabel("Rate")
-        ax1.tick_params(axis='y')
-        ax1.legend(loc='upper left')
+        ax1.tick_params(axis="y")
+        ax1.legend(loc="upper left")
 
         # Create a second y-axis for feasible solutions
         ax2 = ax1.twinx()
-        ax2.plot(range(len(self.feasible_epochs) - 1), self.feasible_epochs[:-1], "s-", color='green', label="Feasible solutions")
-        ax2.set_ylabel("Feasible solutions", color='green')
+        ax2.plot(
+            range(len(self.feasible_epochs) - 1),
+            self.feasible_epochs[:-1],
+            "s-",
+            color="green",
+            label="Feasible solutions",
+        )
+        ax2.set_ylabel("Feasible solutions", color="green")
         ax2.set_ylim(0, max(self.feasible_epochs) * 1.1)
-        ax2.tick_params(axis='y', labelcolor='green')
-        ax2.legend(loc='upper right')
+        ax2.tick_params(axis="y", labelcolor="green")
+        ax2.legend(loc="upper right")
 
         plt.title("Average rate, best rate, and feasible solutions in each epoch")
         fig.tight_layout()
