@@ -18,7 +18,7 @@ class Metaheuristic(PreAssignmentMixin):
     In this class you should implement your metaheuristic proposal. The code that you submit for the tournament should be
     included in this class. Please, bear in mind that the current template includes all the mandatory methods, but you can implement any
     other method that you need to. In fact, you are highly encouraged to make a good software design a decompose the behavior of your algorithm
-    into several iindependent components or methods.
+    into several independent components or methods.
 
     The HEADERS for the provided methods CANNOT be modified. Failing to do so will result in your algorithm not participating in the tournament.
     """
@@ -354,8 +354,7 @@ class Metaheuristic(PreAssignmentMixin):
             if population is None:
                 raise ValueError("Either population or solutions must be provided.")
             solutions = self.get_solutions(population)
-        rates = (solutions @ self.d @ solutions.T).diagonal()
-        return rates / 2
+        return np.sum((solutions @ self.d) * solutions, axis=1) / 2
 
     def get_returns(self, population=None, solutions=None):
         if solutions is None:

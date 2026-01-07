@@ -68,7 +68,9 @@ class Metaheuristic(PreAssignmentMixin):
         self.read_problem_instance(self.problem_path)
         if self.pre_ass:
             self.apply_pre_assignment()
-        curr_popoulation, curr_velocity = self.initialize_population(self.pop_size)
+        curr_popoulation, curr_velocity = (
+            self.initialize_population_greedy(self.pop_size) if self.warm_start else self.initialize_population_random(self.pop_size)
+        )
         curr_rates = -self.get_rates(curr_popoulation)
         max_val = curr_rates.max()
         pbest = np.ones(self.pop_size) + max_val
@@ -79,14 +81,14 @@ class Metaheuristic(PreAssignmentMixin):
         no_improve = np.zeros(self.pop_size, dtype=int)
         gbest_no_improve = 0
         iteration = 0
-        total_feasible = 0
         self.best_rate_epochs = []
         self.epochs_times = []
         self.avg_rate_epochs = []
         self.feasible_epochs = []
         start_time = time.time()
-        total_time_allowed = self.time_deadline - 2.0
-        while (time.time() - start_time) < total_time_allowed:
+        total_time_allowed = self.time_deadline - 0.5
+        end_time = start_time + total_time_allowed
+        while time.time() < end_time:
             elapsed_ratio = (time.time() - start_time) / total_time_allowed
             iteration += 1
             # Calculate fitness
@@ -127,8 +129,7 @@ class Metaheuristic(PreAssignmentMixin):
             if iteration % 200 == 0 and self.x_best is not None:
                 improved_local_x = self.local_search(current_local_best_x)
 
-                new_div = self.get_rates(solutions=improved_local_x.reshape(1, -1))[0]
-                new_fitness = -new_div
+                new_fitness = -self.get_rates(solutions=improved_local_x.reshape(1, -1))[0]
 
                 if new_fitness < gbest:
                     gbest = new_fitness
@@ -149,8 +150,6 @@ class Metaheuristic(PreAssignmentMixin):
             num_feasible = feasible.sum()
             self.feasible_epochs.append(num_feasible)
 
-            # Determine number of leaders
-            total_feasible += num_feasible
             num_leaders = min(self.max_leaders, num_feasible) if num_feasible > 0 else 1
 
             # Select leaders
@@ -314,6 +313,7 @@ class Metaheuristic(PreAssignmentMixin):
         self.neighbourhood_threshold = (
             kwargs.get("neighbourhood_threshold", 0.7) * self.B
         )
+        self.warm_start = kwargs.get("warm_start", True)
         self.iw_max = kwargs.get("iw_max", 1.05)
         self.iw_min = kwargs.get("iw_min", 0.4)
         self.excluded_assets = []
@@ -328,7 +328,7 @@ class Metaheuristic(PreAssignmentMixin):
         self.mutation_boost = kwargs.get("mutation_boost", 2.5)
         self.mutation_floor = kwargs.get("mutation_floor", 0.05)
 
-    def initialize_population(self, pop_size):
+    def initialize_population_random(self, pop_size):
         population = np.zeros((pop_size, self.n * 2), dtype=int)
         velocity = np.zeros((pop_size, self.n * 2), dtype=float)
         for i in range(pop_size):
@@ -444,7 +444,7 @@ class Metaheuristic(PreAssignmentMixin):
         velocity[:, : self.n] = np.clip(
             np.where(
                 mutation_mask & population[:, self.n :],
-                velocity[:, : self.n] * (np.random.randn(pop_size, self.n) - 0.5) * 4,
+                velocity[:, : self.n] * (np.random.rand(pop_size, self.n) - 0.5) * 4,
                 velocity[:, : self.n],
             ),
             -0.25 * self.B,
@@ -559,35 +559,35 @@ class Metaheuristic(PreAssignmentMixin):
         plt.savefig("plots/plot_pso.png")
         plt.show()
 
-    def initialize_population(self, pop_size):
+    def initialize_population_greedy(self, pop_size):
         population = np.zeros((pop_size, self.n * 2), dtype=int)
         velocity = np.zeros((pop_size, self.n * 2), dtype=float)
 
-        # 1. Oblicz ranking zachłanny (Greedy Score)
-        # Wykorzystujemy zwrot r i średnią odległość od innych aktywów (dywersyfikacja)
+        # 1. Calculate greedy ranking (Greedy Score)
+        # We use return r and average distance from other assets (diversification)
         avg_dist = self.d.mean(axis=1)
         greedy_scores = self.r * avg_dist
 
-        # 2. Wyznacz pulę "Top-Tier" (np. 2 razy więcej niż wymagane k)
+        # 2. Determine the "Top-Tier" pool (e.g., 2 times more than required k)
         pool_size = min(self.n, self.k * 2)
         top_tier_indices = np.argsort(greedy_scores)[-pool_size:]
 
         for i in range(pop_size):
-            # 20% populacji to Warm-Start
+            # 20% of population is Warm-Start
             if i < pop_size * 0.2:
-                # Losujemy k aktywów Z PULI najlepszych (każdy dostanie inny zestaw!)
+                # Randomly select k assets FROM THE POOL of the best (each will get a different set!)
                 picks = np.random.choice(top_tier_indices, self.k, replace=False)
             else:
-                # Reszta (80%) to pełna eksploracja - losowanie z całej dostępnej puli n
+                # The rest (80%) is full exploration - random selection from the entire available pool n
                 picks = np.random.choice(self.n, self.k, replace=False)
 
             individual = np.zeros(self.n * 2, dtype=int)
-            # Inicjalizacja pozycji (wagi)
+            # Initialize positions (weights)
             individual[: self.n] = np.random.choice(self.B, self.n, replace=True)
-            individual[picks + self.n] = 1  # Ustawienie bitów wyboru aktywów
+            individual[picks + self.n] = 1  # Set asset selection bits
 
             population[i] = individual
-            # Inicjalizacja prędkości
+            # Initialize velocity
             velocity[i, : self.n] = np.random.uniform(
                 -0.25 * self.B, 0.25 * self.B, self.n
             )
