@@ -402,7 +402,7 @@ class Metaheuristic(PreAssignmentMixin):
         velocity[:, : self.n] = np.clip(np.where(
             mutation_mask&population[:, self.n :],
             velocity[:, : self.n]
-            *(np.random.randn(pop_size, self.n)-0.5)*4,
+            *(np.random.rand(pop_size, self.n)-0.5)*4,
             velocity[:, : self.n]
         ), -0.25 * self.B, 0.25 * self.B)
         population[:, : self.n] = np.clip(np.where(
