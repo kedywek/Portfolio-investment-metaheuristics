@@ -92,6 +92,8 @@ def parse_params(pairs: List[str]) -> Dict[str, Any]:
 def list_instance_files(instances_dir: str) -> List[str]:
     pat = os.path.join(instances_dir, "*.json")
     files = sorted(glob.glob(pat))
+    # Exclude test instances
+    files = [f for f in files if "test" not in os.path.basename(f).lower()]
     return files
 
 
