@@ -22,7 +22,7 @@ import json
 import click
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 
 # Ensure repo root on sys.path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,21 +36,35 @@ def load_result_file(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def get_label(result: Dict[str, Any], filepath: str) -> str:
-    """Generate a human-readable label for a result set."""
-    module = result.get("meta_module", "unknown")
-    # Extract algorithm name from module path
+def get_label(result: Dict[str, Any], filepath: str, experiment_index: Optional[int] = None) -> str:
+    """Generate a human-readable label for a result/experiment.
+
+    For grid-search outputs, each experiment gets its own label that
+    includes key parameter values so it is treated as a distinct model.
+    """
     algo = os.path.basename(filepath).replace(".json", "")
-    
-    params = result.get("params", {})
-    pre_ass = params.get("pre_assignment", False)
+
+    params = result.get("params", {}) or {}
+    pre_ass = bool(params.get("pre_assignment", False))
     deadline = result.get("deadline", "?")
-    
+
+    # Build short parameter summary (excluding pre_assignment which is shown separately)
+    param_items = [(k, v) for k, v in sorted(params.items()) if k != "pre_assignment"]
+    param_str_parts: List[str] = []
+    for k, v in param_items:
+        param_str_parts.append(f"{k}={v}")
+    param_str = ", ".join(param_str_parts)
+
     label = f"{algo}"
     if pre_ass:
         label += " (pre-ass)"
+    if param_str:
+        label += f" {{{param_str}}}"
+    elif experiment_index is not None:
+        # No descriptive params; at least disambiguate experiments by index
+        label += f" #{experiment_index}"
     label += f" [{deadline}s]"
-    
+
     return label
 
 
@@ -644,14 +658,31 @@ def main(result_files: Tuple[str], output_dir: str, show: bool):
         click.echo("Error: No result files provided.")
         return
     
-    # Load all result files
-    results = []
+    # Load all result files, expanding grid-search experiments into
+    # separate entries so each configuration is treated as a model.
+    results: List[Tuple[str, Dict[str, Any], str]] = []
     for fpath in result_files:
         try:
             data = load_result_file(fpath)
-            label = get_label(data, fpath)
-            results.append((fpath, data, label))
-            print(f"Loaded: {fpath} -> {label}")
+
+            experiments = data.get("experiments")
+            if isinstance(experiments, list) and experiments:
+                # New grid-search format: each experiment has its own params/instances
+                for idx, exp in enumerate(experiments, start=1):
+                    exp_result: Dict[str, Any] = {
+                        "meta_module": data.get("meta_module"),
+                        "deadline": data.get("deadline"),
+                        "params": exp.get("params", {}),
+                        "instances": exp.get("instances", {}),
+                    }
+                    label = get_label(exp_result, fpath, experiment_index=idx)
+                    results.append((fpath, exp_result, label))
+                    print(f"Loaded: {fpath} [exp {idx}] -> {label}")
+            else:
+                # Backwards-compatible with old single-experiment format
+                label = get_label(data, fpath)
+                results.append((fpath, data, label))
+                print(f"Loaded: {fpath} -> {label}")
         except Exception as e:
             print(f"Warning: Failed to load {fpath}: {e}")
     

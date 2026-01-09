@@ -36,6 +36,7 @@ import math
 import glob
 import importlib
 import subprocess
+from itertools import product
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
@@ -75,8 +76,16 @@ def parse_param_value(val: str) -> Any:
     return val
 
 
-def parse_params(pairs: List[str]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+def parse_params(pairs: List[str]) -> Dict[str, List[Any]]:
+    """Parse --param key=value entries into a grid dict.
+
+    Supports multiple values per key via either:
+      --param k=v1 --param k=v2
+    or
+      --param k=v1,v2,v3
+    """
+
+    out: Dict[str, List[Any]] = {}
     for p in pairs or []:
         if "=" not in p:
             raise click.BadParameter(f"Invalid --param format '{p}'. Expected key=value.")
@@ -85,7 +94,16 @@ def parse_params(pairs: List[str]) -> Dict[str, Any]:
         v = v.strip()
         if not k:
             raise click.BadParameter(f"Invalid --param with empty key: '{p}'")
-        out[k] = parse_param_value(v)
+        # Allow comma-separated values in a single entry
+        values: List[Any] = []
+        for part in v.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            values.append(parse_param_value(part))
+        if not values:
+            raise click.BadParameter(f"Invalid --param with empty value list: '{p}'")
+        out.setdefault(k, []).extend(values)
     return out
 
 
@@ -295,7 +313,15 @@ def run_once(meta_cls, instance_path: str, deadline: int, seed: Optional[int], c
 @click.option("--repeats", type=int, default=1, help="Number of runs per instance")
 @click.option("--seed", type=int, default=None, help="Base seed; if set, repeats use seed+i")
 @click.option("--output", type=str, required=True, help="Output JSON file path")
-@click.option("--param", multiple=True, help="Extra constructor kwargs as key=value; can be repeated")
+@click.option(
+    "--param",
+    multiple=True,
+    help=(
+        "Extra constructor kwargs as key=value. "
+        "Keys can be repeated or values can be comma-separated to define a grid, "
+        "e.g. --param pop_size=100,200 --param k=5,10 runs all combinations."
+    ),
+)
 @click.option("-f", "--force", is_flag=True, default=False, help="Overwrite existing output file without confirmation")
 def main(meta_module: str, instances_dir: str, deadline: int, repeats: int, seed: Optional[int], output: str, param: List[str], force: bool):
     try:
@@ -306,7 +332,8 @@ def main(meta_module: str, instances_dir: str, deadline: int, repeats: int, seed
         raise click.ClickException(f"Module '{meta_module}' does not define a 'Metaheuristic' class")
     meta_cls = getattr(mod, "Metaheuristic")
 
-    ctor_kwargs = parse_params(list(param))
+    # Parse parameter grid: each key maps to a list of values
+    param_grid = parse_params(list(param))
     files = list_instance_files(instances_dir)
     if not files:
         raise click.ClickException(f"No .json instances found in: {instances_dir}")
@@ -337,38 +364,64 @@ def main(meta_module: str, instances_dir: str, deadline: int, repeats: int, seed
             err=True,
         )
 
+    # Prepare overall results container. We keep metadata once and then
+    # store one experiment entry per parameter combination.
     results: Dict[str, Any] = {
         "meta_module": meta_module,
         "deadline": deadline,
         "repeats": repeats,
         "seed": seed,
-        "params": ctor_kwargs,
+        "param_grid": param_grid,
         "instances_dir": instances_dir,
         "timestamp": int(time.time()),
         "git_commit": git_commit,
         "git_branch": git_branch,
         "git_dirty": git_dirty,
-        "instances": {},
+        "experiments": [],
     }
 
-    for inst_path in tqdm(files, desc="Evaluating instances"):
-        inst_name = os.path.basename(inst_path)
-        runs: List[RunResult] = []
-        for i in range(repeats):
-            run_seed = (seed + i) if seed is not None else None
-            rr = run_once(meta_cls, inst_path, deadline, run_seed, ctor_kwargs)
-            runs.append(rr)
-        summary = summarize_runs(runs)
-        results["instances"][inst_name] = {
-            "runs": [asdict(r) for r in runs],
-            "summary": asdict(summary),
+    # Build list of parameter combinations (Cartesian product over all keys)
+    if param_grid:
+        param_names = sorted(param_grid.keys())
+        value_lists = [param_grid[name] for name in param_names]
+        param_combos = [
+            dict(zip(param_names, values)) for values in product(*value_lists)
+        ]
+    else:
+        # No params given -> single combination with empty kwargs
+        param_combos = [{}]
+
+    total_combos = len(param_combos)
+    click.echo(f"Running grid search over {total_combos} configuration(s)")
+
+    for combo_idx, ctor_kwargs in enumerate(param_combos, start=1):
+        combo_desc = ", ".join(f"{k}={v}" for k, v in ctor_kwargs.items()) or "(no params)"
+        click.echo(f"Configuration {combo_idx}/{total_combos}: {combo_desc}")
+
+        experiment: Dict[str, Any] = {
+            "params": ctor_kwargs,
+            "instances": {},
         }
+        results["experiments"].append(experiment)
 
-        # Incremental save for long batches
-        with open(output_abs, "w") as f:
-            json.dump(results, f, indent=2)
+        for inst_path in tqdm(files, desc=f"Evaluating instances [{combo_idx}/{total_combos}]"):
+            inst_name = os.path.basename(inst_path)
+            runs: List[RunResult] = []
+            for i in range(repeats):
+                run_seed = (seed + i) if seed is not None else None
+                rr = run_once(meta_cls, inst_path, deadline, run_seed, ctor_kwargs)
+                runs.append(rr)
+            summary = summarize_runs(runs)
+            experiment["instances"][inst_name] = {
+                "runs": [asdict(r) for r in runs],
+                "summary": asdict(summary),
+            }
 
-    click.echo(f"Saved evaluation results to: {output_abs}")
+            # Incremental save for long batches
+            with open(output_abs, "w") as f:
+                json.dump(results, f, indent=2)
+
+    click.echo(f"Saved grid-search evaluation results to: {output_abs}")
 
 
 if __name__ == "__main__":
