@@ -1,28 +1,29 @@
-"""Rank models by average finishing position across all runs.
+"""Rank models or grid-search experiments by average finishing position.
 
 Usage:
   python scripts/rank_models.py results/model1.json results/model2.json
 
-For each instance, all runs from all models are ranked together
+Each input file may be either:
+  - a single evaluation (old format with top-level "instances"), or
+  - a grid search (new format with "experiments" list).
+
+For each instance, all runs from all models/experiments are ranked together
 by objective (higher is better). Each run gets a finishing position
-starting at 1. A model's score is the average of the positions of
-all of its runs across all instances. Lower average position is better.
+starting at 1. A model/experiment's score is the average of the positions
+of all of its runs across all instances. Lower average position is better.
 """
 
 import json
 import os
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import click
 
 
-def load_runs(path: str) -> Dict[str, List[float]]:
-    """Return per-instance list of run objectives for a given results file."""
-    with open(path, "r") as f:
-        data = json.load(f)
-
+def _extract_runs_from_instances(instances: Dict[str, Any]) -> Dict[str, List[float]]:
+    """Return per-instance list of run objectives from an instances dict."""
     runs_per_instance: Dict[str, List[float]] = {}
-    for inst_name, inst_data in data.get("instances", {}).items():
+    for inst_name, inst_data in (instances or {}).items():
         runs = inst_data.get("runs", [])
         objs: List[float] = []
         for run in runs:
@@ -34,22 +35,61 @@ def load_runs(path: str) -> Dict[str, List[float]]:
     return runs_per_instance
 
 
+def _summarize_params(params: Dict[str, Any]) -> str:
+    """Build a short parameter summary string like 'k=5, pop=100'."""
+    if not params:
+        return ""
+    parts: List[str] = []
+    for k, v in sorted(params.items()):
+        parts.append(f"{k}={v}")
+    return ", ".join(parts)
+
+
 @click.command()
 @click.argument("result_files", nargs=-1, type=click.Path(exists=True))
 def main(result_files: Tuple[str, ...]) -> None:
     """Rank models by average finishing position over all runs."""
-    if len(result_files) < 2:
-        raise click.ClickException("Need at least 2 result files to compare")
+    if len(result_files) < 1:
+        raise click.ClickException("Need at least 1 result file to compare")
 
-    # Load runs for each model
+    # Load runs for each model or experiment
     model_names: List[str] = []
     model_runs: List[Dict[str, List[float]]] = []
+
     for path in result_files:
-        name = os.path.splitext(os.path.basename(path))[0]
-        model_names.append(name)
-        model_runs.append(load_runs(path))
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        base_name = os.path.splitext(os.path.basename(path))[0]
+        experiments = data.get("experiments")
+
+        if isinstance(experiments, list) and experiments:
+            # New grid-search format: each experiment becomes its own model
+            for idx, exp in enumerate(experiments, start=1):
+                params = exp.get("params", {}) or {}
+                param_str = _summarize_params(params)
+                name = base_name
+                if param_str:
+                    name = f"{base_name} {{{param_str}}}"
+                else:
+                    name = f"{base_name}#{idx}"
+
+                runs = _extract_runs_from_instances(exp.get("instances", {}))
+                if not runs:
+                    continue
+                model_names.append(name)
+                model_runs.append(runs)
+        else:
+            # Backwards-compatible with old single-evaluation format
+            runs = _extract_runs_from_instances(data.get("instances", {}))
+            if not runs:
+                continue
+            model_names.append(base_name)
+            model_runs.append(runs)
 
     n_models = len(model_names)
+    if n_models < 2:
+        raise click.ClickException("Need at least 2 models/experiments with valid runs to compare")
 
     # Collect all instance names
     all_instances = set()
