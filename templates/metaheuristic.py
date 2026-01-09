@@ -3,26 +3,26 @@ import numpy as np
 import time
 from scipy.spatial.distance import cdist
 
-from pathlib import Path
-import sys
-
-# Ensure we can import from templates/
-this_dir = Path(__file__).resolve().parent.parent
-if str(this_dir) not in sys.path:
-    sys.path.insert(0, str(this_dir))
-
 class PreAssignmentMixin:
+    """
+    Mixin class providing pre-assignment functionality to reduce problem size by excluding similar assets.
+    """
     def __init__(self, **kwargs):
+        """
+        Initializes the PreAssignmentMixin with optional parameters.
+        """
         self.pre_ass = kwargs.get('pre_assignment', True)
-        # Zbalansowany próg startowy (0.78)
         self.similarity_threshold = kwargs.get('similarity_threshold', 0.78)
         self.excluded_assets = []
         self.used_assets = []
         self.full_n = None
 
     def quick_pre_assignment(self):
+        """
+        Reduces problem dimensionality by excluding similar assets based on cosine similarity.
+        Maintains minimum required assets and preserves assets with highest returns.
+        """
         D = self.d
-        # ZBALANSOWANY LIMIT: Zostawiamy min. 300 aktywów lub 3*k
         min_required = max(self.k * 3, 300)
         max_exclusions = self.n - min_required
         
@@ -32,16 +32,13 @@ class PreAssignmentMixin:
             self.used_assets = list(range(self.n))
             return
 
-        # Obliczanie podobieństwa cosinusowego
         col_norms = np.linalg.norm(D, axis=0)
         safe_norms = np.where(col_norms == 0.0, 1.0, col_norms)
         X = (D / safe_norms).T
         S = np.clip((X @ X.T), -1.0, 1.0)
 
-        # Sortowanie po zwrocie - zachowujemy te, które najlepiej zarabiają
         sorted_indices = sorted(range(self.n), key=lambda x: -self.r[x])
         
-        # Pętla dopasowująca próg, jeśli usuniemy za dużo aktywów
         while not self.run_quick_pa(S, max_exclusions, sorted_indices, self.similarity_threshold):
             self.similarity_threshold += 0.01
             if self.similarity_threshold > 0.99:
@@ -51,19 +48,27 @@ class PreAssignmentMixin:
                 break
 
     def run_quick_pa(self, S, max_exclusions, sorted_indices, threshold):
-        """Metoda wykonująca faktyczną selekcję aktywów."""
+        """
+        Performs asset selection by excluding similar assets with lower returns.
+        
+        Args:
+            S: Similarity matrix between assets
+            max_exclusions: Maximum number of assets that can be excluded
+            sorted_indices: Asset indices sorted by return (descending)
+            threshold: Similarity threshold for exclusion
+            
+        Returns:
+            bool: True if exclusion succeeded within limits, False otherwise
+        """
         excluded = set()
         for idx, i in enumerate(sorted_indices):
             if i in excluded:
                 continue
-            # Porównujemy tylko z aktywami o gorszym zwrocie
             for j in sorted_indices[idx + 1:]:
                 if j in excluded:
                     continue
-                # Jeśli aktywa są zbyt podobne, usuwamy to z mniejszym zwrotem
                 if S[i, j] > threshold:
                     excluded.add(j)
-                    # Bezpiecznik: jeśli usunęliśmy za dużo, przerywamy i podnosimy próg
                     if len(excluded) >= max_exclusions:
                         return False
 
@@ -72,6 +77,10 @@ class PreAssignmentMixin:
         return True
 
     def apply_pre_assignment(self):
+        """
+        Applies pre-assignment by reducing problem dimensions based on asset similarity.
+        Updates n, r, and d to reflect only the selected subset of assets.
+        """
         self.full_n = self.n
         if self.pre_ass:
             self.quick_pre_assignment()
@@ -80,12 +89,19 @@ class PreAssignmentMixin:
             self.n = len(self.used_assets)
             self.r = np.array([self.r[i] for i in self.used_assets])
             
-            # Szybka redukcja macierzy dystansów
             temp_d = self.d[self.used_assets, :]
             self.d = temp_d[:, self.used_assets]
 
     def expand_weights(self, weights):
-        """Mapowanie wag z powrotem do pełnego wymiaru n=1000."""
+        """
+        Maps weights from reduced dimension back to full dimension.
+        
+        Args:
+            weights: Weight vector in reduced dimension
+            
+        Returns:
+            np.ndarray: Weight vector in full original dimension
+        """
         if self.full_n is None or not self.pre_ass:
             return weights
         full_vector = np.zeros(self.full_n, dtype=float)
@@ -94,6 +110,15 @@ class PreAssignmentMixin:
         return full_vector
     
     def expand_distances(self, distances):
+        """
+        Maps distance matrix from reduced dimension back to full dimension.
+        
+        Args:
+            distances: Distance matrix in reduced dimension
+            
+        Returns:
+            np.ndarray: Distance matrix in full original dimension
+        """
         if self.full_n is None or not self.pre_ass:
             return distances
         full = np.zeros((self.full_n, self.full_n), dtype=float)
@@ -130,6 +155,12 @@ class Metaheuristic(PreAssignmentMixin):
         self.d = np.array(instance_data["dij"])
 
     def set_x_best(self, x_best):
+        """
+        Sets the best solution found, expanding to full dimension if using pre-assignment.
+        
+        Args:
+            x_best: Best solution weight vector
+        """
         self.x_best = self.expand_weights(x_best) if self.pre_ass else x_best
 
     def get_best_solution(self):
@@ -143,7 +174,6 @@ class Metaheuristic(PreAssignmentMixin):
         if self.x_best is None:
             raise Exception("No solution has been found yet.")
 
-        # extracting picks and normalizing
         x = self.x_best.copy()
         normalized = x / (x.sum() + 1e-10)
         return normalized.tolist()
@@ -166,7 +196,6 @@ class Metaheuristic(PreAssignmentMixin):
         pbest_pos = curr_popoulation.copy()
         gbest = max_val + 1
         gbest_pos = None
-        # Exploration/state trackers
         no_improve = np.zeros(self.pop_size, dtype=int)
         gbest_no_improve = 0
         iteration = 0
@@ -180,7 +209,6 @@ class Metaheuristic(PreAssignmentMixin):
         while time.time() < end_time:
             elapsed_ratio = (time.time() - start_time) / total_time_allowed
             iteration += 1
-            # Calculate fitness
             curr_solutions = self.get_solutions(curr_popoulation)
             curr_rates = -self.get_rates(solutions=curr_solutions)
             curr_returns = self.get_returns(solutions=curr_solutions)
@@ -193,15 +221,12 @@ class Metaheuristic(PreAssignmentMixin):
                 feasible, curr_rates, np.maximum(ret_cond, size_cond) + 1
             )
 
-            # Update particle best
             pbest_update = curr_fitness < pbest
             pbest[pbest_update] = curr_fitness[pbest_update]
             pbest_pos[pbest_update] = curr_popoulation[pbest_update]
-            # Track particle-level stagnation
             no_improve[~pbest_update] += 1
             no_improve[pbest_update] = 0
 
-            # Update global best
             min_idx = np.argmin(pbest)
             if pbest[min_idx] < gbest:
                 gbest = pbest[min_idx]
@@ -232,7 +257,6 @@ class Metaheuristic(PreAssignmentMixin):
                     gbest_pos[: self.n] = improved_local_x * self.B
                     gbest_pos[self.n :] = (improved_local_x > 0).astype(int)
                     gbest_no_improve = 0
-            # Record stats
             self.best_rate_epochs.append(gbest)
             self.epochs_times.append(time.time() - start_time)
             self.avg_rate_epochs.append(curr_rates.mean())
@@ -241,13 +265,11 @@ class Metaheuristic(PreAssignmentMixin):
 
             num_leaders = min(self.max_leaders, num_feasible) if num_feasible > 0 else 1
 
-            # Select leaders
             fitness_order = np.argsort(curr_fitness)
             leader_indices = fitness_order[:num_leaders]
             leaders = curr_popoulation[leader_indices]
             leaders_pbest = pbest[leader_indices]
             leaders_pbest_pos = pbest_pos[leader_indices]
-            # Remove leaders from population to avoid self-influence
             non_leader_mask = np.ones(self.pop_size, dtype=bool)
             non_leader_mask[leader_indices] = False
             non_leaders = curr_popoulation[non_leader_mask]
@@ -256,7 +278,6 @@ class Metaheuristic(PreAssignmentMixin):
             non_leaders_pbest_pos = pbest_pos[non_leader_mask]
             non_leader_indices = np.where(non_leader_mask)[0]
 
-            # Construct subpopulations around leaders (with thresholding)
             distances = cdist(
                 non_leaders[:, : self.n], leaders[:, : self.n], metric="euclidean"
             )
@@ -266,18 +287,14 @@ class Metaheuristic(PreAssignmentMixin):
             subpoped_vel = non_leaders_vel[in_threshold]
             subpoped_pbest = non_leaders_pbest[in_threshold]
             subpoped_pbest_pos = non_leaders_pbest_pos[in_threshold]
-            subpoped_orig_indices = non_leader_indices[
-                in_threshold
-            ]  # track original indices
+            subpoped_orig_indices = non_leader_indices[in_threshold]
             subpopulations = [
                 (
                     subpoped[closest_leader == i],
                     subpoped_vel[closest_leader == i],
                     subpoped_pbest[closest_leader == i],
                     subpoped_pbest_pos[closest_leader == i],
-                    subpoped_orig_indices[
-                        closest_leader == i
-                    ],  # include original indices
+                    subpoped_orig_indices[closest_leader == i],
                 )
                 for i in range(num_leaders)
             ]
@@ -286,22 +303,16 @@ class Metaheuristic(PreAssignmentMixin):
             non_subpoped_vel = non_leaders_vel[~in_threshold]
             nsp_pbest = non_leaders_pbest[~in_threshold]
             nsp_pbest_pos = non_leaders_pbest_pos[~in_threshold]
-            nsp_orig_indices = non_leader_indices[
-                ~in_threshold
-            ]  # track original indices
+            nsp_orig_indices = non_leader_indices[~in_threshold]
 
-            # Calculate inertia weight
             iw = self.iw_max - (self.iw_max - self.iw_min) * elapsed_ratio
             iw = max(self.iw_min, iw)
 
-            # Calcuate mutation probablility (with floor to preserve diversity)
             pm = max(self.mutation_floor, 0.5 * (1 - elapsed_ratio) ** 2)
-            # Diversity-aware boost (normalized in [0,1])
             div = self._picks_diversity(curr_popoulation)
             if div < self.diversity_floor:
                 pm = min(1.0, pm * self.mutation_boost)
 
-            # Reinitialize stagnant non-leaders to escape local traps
             if non_leaders.shape[0] > 0:
                 stagnant_mask_nl = (
                     no_improve[non_leader_indices] >= self.stagnation_patience
@@ -316,10 +327,8 @@ class Metaheuristic(PreAssignmentMixin):
                     ]
                     no_improve[non_leader_indices[stagnant_mask_nl]] = 0
 
-            # Inject random immigrants if gbest stagnates
             if gbest_no_improve >= self.gbest_patience and non_leaders.shape[0] > 0:
                 num_imm = max(1, int(self.restart_fraction * non_leaders.shape[0]))
-                # choose worst non-leaders by current fitness
                 order_nl = np.argsort(curr_fitness[non_leader_indices])
                 worst_sel = order_nl[-num_imm:]
                 self._reinitialize_subset(
@@ -341,7 +350,6 @@ class Metaheuristic(PreAssignmentMixin):
                 non_subpoped, non_subpoped_vel, nsp_pbest_pos, gbest_pos, iw, pm
             )
 
-            # Reconstruct population and reorder no_improve to maintain particle identity
             new_order = np.concatenate(
                 [leader_indices, *(sp[4] for sp in subpopulations), nsp_orig_indices]
             )
@@ -361,20 +369,24 @@ class Metaheuristic(PreAssignmentMixin):
             pbest_pos = np.vstack(
                 (leaders_pbest_pos, *(sp[3] for sp in subpopulations), nsp_pbest_pos)
             )
-            # Reorder no_improve to match new population order
             no_improve = no_improve[new_order]
 
     def _reinitialize_subset(self, population_subset, velocity_subset):
+        """
+        Reinitializes a subset of the population with random values.
+        
+        Args:
+            population_subset: Subset of population to reinitialize
+            velocity_subset: Corresponding velocity vectors
+        """
         m = population_subset.shape[0]
         if m == 0:
             return
-        # random picks with exactly k ones
         picks = np.zeros((m, self.n), dtype=int)
         for i in range(m):
             ones = np.random.choice(self.n, self.k, replace=False)
             picks[i, ones] = 1
         population_subset[:, self.n :] = picks
-        # random positions and velocities
         population_subset[:, : self.n] = np.random.choice(
             self.B, (m, self.n), replace=True
         )
@@ -384,18 +396,36 @@ class Metaheuristic(PreAssignmentMixin):
         velocity_subset[:, self.n :] = np.random.uniform(-2.5, 2.5, (m, self.n))
 
     def _picks_diversity(self, population):
+        """
+        Calculates diversity measure for asset selection in population.
+        
+        Args:
+            population: Current population
+            
+        Returns:
+            float: Diversity score in range [0, 1]
+        """
         if population.shape[0] == 0:
             return 0.0
         p = population[:, self.n :].mean(axis=0)
         return float(4.0 * np.mean(p * (1.0 - p)))
 
     def __init__(self, time_deadline, problem_path, pop_size=1000, **kwargs):
+        """
+        Initializes the metaheuristic with PSO-based portfolio optimization.
+        
+        Args:
+            time_deadline: Maximum execution time in seconds
+            problem_path: Path to problem instance JSON file
+            pop_size: Population size for PSO
+            **kwargs: Additional configuration parameters
+        """
         super().__init__(**kwargs)
         self.problem_path = problem_path
         self.best_solution = None
         self.time_deadline = time_deadline
         self.pop_size = pop_size
-        self.B = kwargs.get("B", 10000)  # upper bound for position values
+        self.B = kwargs.get("B", 10000)
         self.pre_ass = kwargs.get("pre_assignment", True)
         self.max_leaders = kwargs.get("max_leaders", 10)
         self.neighbourhood_threshold = (
@@ -405,10 +435,8 @@ class Metaheuristic(PreAssignmentMixin):
         self.iw_max = kwargs.get("iw_max", 1.05)
         self.iw_min = kwargs.get("iw_min", 0.4)
         self.excluded_assets = []
-        # Numerical stability controls
         self.eps_norm = kwargs.get("eps_norm", 1e-8)
         self.weight_floor = kwargs.get("weight_floor", 0.001)
-        # Exploration controls
         self.stagnation_patience = kwargs.get("stagnation_patience", 10)
         self.gbest_patience = kwargs.get("gbest_patience", 20)
         self.restart_fraction = kwargs.get("restart_fraction", 0.2)
@@ -417,6 +445,15 @@ class Metaheuristic(PreAssignmentMixin):
         self.mutation_floor = kwargs.get("mutation_floor", 0.05)
 
     def initialize_population_random(self, pop_size):
+        """
+        Initializes population with random positions and velocities.
+        
+        Args:
+            pop_size: Size of population to initialize
+            
+        Returns:
+            tuple: (population, velocity) arrays
+        """
         population = np.zeros((pop_size, self.n * 2), dtype=int)
         velocity = np.zeros((pop_size, self.n * 2), dtype=float)
         for i in range(pop_size):
@@ -440,16 +477,33 @@ class Metaheuristic(PreAssignmentMixin):
         return population, velocity
 
     def get_sizes(self, population):
+        """
+        Calculates portfolio sizes (number of selected assets) for population.
+        
+        Args:
+            population: Population array
+            
+        Returns:
+            np.ndarray: Array of portfolio sizes
+        """
         picks = population[:, self.n :] & (population[:, : self.n] > 0)
         sizes = picks.sum(axis=1)
         return sizes
 
     def get_solutions(self, population):
+        """
+        Converts population encoding to normalized weight solutions.
+        
+        Args:
+            population: Population array
+            
+        Returns:
+            np.ndarray: Normalized weight vectors
+        """
         placings = population[:, : self.n] * population[:, self.n :]
         sums = placings.sum(axis=1, keepdims=True)
         sums = np.where(sums <= self.eps_norm, 1.0, sums)
         solutions = placings / sums
-        # Apply floor to avoid vanishing weights, then renormalize
         if self.weight_floor > 0.0:
             solutions = np.where(
                 solutions > 0, np.maximum(solutions, self.weight_floor), 0.0
@@ -460,6 +514,16 @@ class Metaheuristic(PreAssignmentMixin):
         return solutions
 
     def get_rates(self, population=None, solutions=None):
+        """
+        Calculates diversification rates (objective function) for solutions.
+        
+        Args:
+            population: Population array (optional if solutions provided)
+            solutions: Normalized weight vectors (optional if population provided)
+            
+        Returns:
+            np.ndarray: Diversification rates
+        """
         if solutions is None:
             if population is None:
                 raise ValueError("Either population or solutions must be provided.")
@@ -467,6 +531,16 @@ class Metaheuristic(PreAssignmentMixin):
         return np.sum((solutions @ self.d) * solutions, axis=1) / 2
 
     def get_returns(self, population=None, solutions=None):
+        """
+        Calculates expected returns for solutions.
+        
+        Args:
+            population: Population array (optional if solutions provided)
+            solutions: Normalized weight vectors (optional if population provided)
+            
+        Returns:
+            np.ndarray: Expected returns
+        """
         if solutions is None:
             if population is None:
                 raise ValueError("Either population or solutions must be provided.")
@@ -475,11 +549,21 @@ class Metaheuristic(PreAssignmentMixin):
         return returns
 
     def update_pos_vel(self, population, velocity, pbest, gbest, iw, pm):
+        """
+        Updates particle positions and velocities using PSO rules.
+        
+        Args:
+            population: Current population positions
+            velocity: Current velocity vectors
+            pbest: Personal best positions
+            gbest: Global best position
+            iw: Inertia weight
+            pm: Mutation probability
+        """
         pop_size = population.shape[0]
         c1 = 1.496
         c2 = 1.496
 
-        # Update binary velocity
         r1 = np.random.rand(pop_size, self.n)
         r2 = np.random.rand(pop_size, self.n)
         velocity[:, self.n :] = np.clip(
@@ -490,22 +574,16 @@ class Metaheuristic(PreAssignmentMixin):
             2.5,
         )
 
-        # Update binary position using directional bias (Option B)
-        # Probability of changing the bit: 0 at velocity=0, approaches 1 at high |velocity|
         change_prob = 1 - np.exp(-np.abs(velocity[:, self.n :]))
-        # Direction: positive velocity wants 1, negative wants 0
         target = (velocity[:, self.n :] > 0).astype(int)
-        # Only change if random < change_prob AND current differs from target
         rand_vals = np.random.rand(pop_size, self.n)
         population[:, self.n :] = np.where(
             rand_vals < change_prob, target, population[:, self.n :]
         )
 
-        # Mutate binary position
         self.mutate_binary(population, pm)
         self.project_picks_to_k(population, velocity)
 
-        # Update continuous velocity
         r1 = np.random.rand(pop_size, self.n) + 0.5
         r2 = np.random.rand(pop_size, self.n) + 0.5
         velocity[:, : self.n] = np.clip(
@@ -516,7 +594,6 @@ class Metaheuristic(PreAssignmentMixin):
             0.25 * self.B,
         )
 
-        # Update continuous position
         population[:, : self.n] = np.clip(
             np.where(
                 population[:, self.n :],
@@ -527,7 +604,6 @@ class Metaheuristic(PreAssignmentMixin):
             self.B,
         )
 
-        # Mutate continuous
         mutation_mask = np.random.rand(pop_size, self.n) < pm * 0.2
         velocity[:, : self.n] = np.clip(
             np.where(
@@ -549,6 +625,13 @@ class Metaheuristic(PreAssignmentMixin):
         )
 
     def mutate_binary(self, population, pm):
+        """
+        Applies binary mutation by swapping selected/unselected assets.
+        
+        Args:
+            population: Population array
+            pm: Mutation probability
+        """
         pop_size = population.shape[0]
         picks = population[:, self.n :]
         picks_sum = picks.sum(axis=1)
@@ -570,6 +653,13 @@ class Metaheuristic(PreAssignmentMixin):
         population[:, self.n :] = picks
 
     def project_picks_to_k(self, population, velocity):
+        """
+        Ensures exactly k assets are selected in each solution.
+        
+        Args:
+            population: Population array
+            velocity: Velocity array used for scoring assets
+        """
         n = self.n
         picks = population[:, n:]
         scores = velocity[:, n:]
@@ -584,18 +674,14 @@ class Metaheuristic(PreAssignmentMixin):
         for i in idx:
             s = int(picks_sum[i])
             if s > k:
-                # Remove (s-k) picks: drop those with the lowest scores among current ones
                 ones_idx = np.where(picks[i] == 1)[0]
                 if ones_idx.size > 0:
-                    # number to remove
                     to_remove = s - k
-                    # find lowest-scoring ones
                     remove_idx = ones_idx[
                         np.argpartition(scores[i, ones_idx], to_remove - 1)[:to_remove]
                     ]
                     picks[i, remove_idx] = 0
-            else:  # s < k
-                # Add (k-s) picks: choose highest scores among current zeros
+            else:
                 zeros_idx = np.where(picks[i] == 0)[0]
                 if zeros_idx.size > 0:
                     to_add = k - s
@@ -606,11 +692,13 @@ class Metaheuristic(PreAssignmentMixin):
         population[:, n:] = picks
 
     def draw_graph(self):
+        """
+        Generates and saves visualization of optimization progress.
+        """
         import matplotlib.pyplot as plt
 
         fig, ax1 = plt.subplots()
 
-        # Plot rates on the primary y-axis
         ax1.plot(
             range(len(self.avg_rate_epochs) - 1),
             self.avg_rate_epochs[:-1],
@@ -628,7 +716,6 @@ class Metaheuristic(PreAssignmentMixin):
         ax1.tick_params(axis="y")
         ax1.legend(loc="upper left")
 
-        # Create a second y-axis for feasible solutions
         ax2 = ax1.twinx()
         ax2.plot(
             range(len(self.feasible_epochs) - 1),
@@ -648,34 +735,36 @@ class Metaheuristic(PreAssignmentMixin):
         plt.show()
 
     def initialize_population_greedy(self, pop_size):
+        """
+        Initializes population with greedy warm-start strategy.
+        20% of population starts with high-quality assets, 80% random.
+        
+        Args:
+            pop_size: Size of population to initialize
+            
+        Returns:
+            tuple: (population, velocity) arrays
+        """
         population = np.zeros((pop_size, self.n * 2), dtype=int)
         velocity = np.zeros((pop_size, self.n * 2), dtype=float)
 
-        # 1. Calculate greedy ranking (Greedy Score)
-        # We use return r and average distance from other assets (diversification)
         avg_dist = self.d.mean(axis=1)
         greedy_scores = self.r * avg_dist
 
-        # 2. Determine the "Top-Tier" pool (e.g., 2 times more than required k)
         pool_size = min(self.n, self.k * 2)
         top_tier_indices = np.argsort(greedy_scores)[-pool_size:]
 
         for i in range(pop_size):
-            # 20% of population is Warm-Start
             if i < pop_size * 0.2:
-                # Randomly select k assets FROM THE POOL of the best (each will get a different set!)
                 picks = np.random.choice(top_tier_indices, self.k, replace=False)
             else:
-                # The rest (80%) is full exploration - random selection from the entire available pool n
                 picks = np.random.choice(self.n, self.k, replace=False)
 
             individual = np.zeros(self.n * 2, dtype=int)
-            # Initialize positions (weights)
             individual[: self.n] = np.random.choice(self.B, self.n, replace=True)
-            individual[picks + self.n] = 1  # Set asset selection bits
+            individual[picks + self.n] = 1
 
             population[i] = individual
-            # Initialize velocity
             velocity[i, : self.n] = np.random.uniform(
                 -0.25 * self.B, 0.25 * self.B, self.n
             )
@@ -684,6 +773,15 @@ class Metaheuristic(PreAssignmentMixin):
         return population, velocity
 
     def local_search(self, solution):
+        """
+        Applies local search by transferring small weights between assets.
+        
+        Args:
+            solution: Current solution weight vector
+            
+        Returns:
+            np.ndarray: Improved solution
+        """
         best_sol = solution.copy()
         best_div = self.get_rates(solutions=best_sol.reshape(1, -1))[0]
 
