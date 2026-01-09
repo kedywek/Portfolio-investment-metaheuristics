@@ -301,6 +301,7 @@ class Metaheuristic(PreAssignmentMixin):
         return float(4.0 * np.mean(p * (1.0 - p)))
 
     def __init__(self, time_deadline, problem_path, pop_size=100, **kwargs):
+        super().__init__(**kwargs)
         self.problem_path = problem_path
         self.best_solution = None
         self.time_deadline = time_deadline
